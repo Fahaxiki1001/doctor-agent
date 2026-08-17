@@ -148,6 +148,7 @@ export interface DoneData {
   swarm_enabled?: boolean
   agents_involved?: string[]
   total_time?: number
+  time_to_first_token?: number
   usage?: {
     prompt_tokens?: number
     completion_tokens?: number
@@ -330,6 +331,7 @@ export interface SessionTurn {
     mode?: string
     agents_involved?: string[]
     total_time?: number
+    time_to_first_token?: number
     total_tokens?: number
     subtasks_completed?: number
     assistant_message_id?: string

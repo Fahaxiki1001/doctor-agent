@@ -121,6 +121,8 @@ class SessionDB:
                 agents_involved    TEXT,
                     -- Agent 列表 JSON
                 total_time         REAL DEFAULT 0,
+                time_to_first_token REAL,
+                    -- 首 token 用时（秒），可空
                 total_tokens       INTEGER DEFAULT 0,
                 subtasks_completed INTEGER DEFAULT 0,
                 mode               TEXT,
@@ -202,6 +204,7 @@ class SessionDB:
             ("messages", "citations", "TEXT"),
             ("messages", "images", "TEXT"),
             ("messages", "trace_id", "TEXT"),
+            ("messages", "time_to_first_token", "REAL"),
         ]
         for table, col, col_type in migrations:
             try:
@@ -537,8 +540,9 @@ class SessionDB:
                     (session_id, turn_index, role, content, timestamp,
                      agent_events, suggestions,
                      agents_involved, total_time, total_tokens,
-                     subtasks_completed, mode, citations, trace_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     subtasks_completed, mode, citations, trace_id,
+                     time_to_first_token)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     session_id,
@@ -559,6 +563,7 @@ class SessionDB:
                     json.dumps(citations, ensure_ascii=False, default=str)
                     if citations else None,
                     assistant_msg.get("trace_id"),
+                    assistant_msg.get("time_to_first_token"),
                 ),
             )
             return {

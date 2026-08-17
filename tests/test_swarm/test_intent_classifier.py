@@ -262,17 +262,17 @@ class TestChatModeRouting:
 
     @pytest.mark.asyncio
     async def test_medical_does_not_route_to_chat(self):
-        """medical 意图：路由到正常流程（clarify），不是 chat_reply。"""
+        """medical 意图：路由到正常流程（先检索记忆），不是 chat_reply。"""
         from mediZJ.lgraph.supervisor_graph import route_by_intent
 
         # others 意图（chat_mode=True）→ chat_reply
         assert route_by_intent({"chat_mode": True, "intent": "others"}) == "chat_reply"
         # others 意图（仅 intent 字段）→ chat_reply
         assert route_by_intent({"intent": "others"}) == "chat_reply"
-        # medical 意图 → 澄清决策
-        assert route_by_intent({"intent": "medical", "chat_mode": False}) == "clarify_decide"
+        # medical 意图 → 先检索记忆（再进入澄清决策）
+        assert route_by_intent({"intent": "medical", "chat_mode": False}) == "retrieve_memories"
         # 缺省（无意图信息，如异常降级）→ 保守走正常流程
-        assert route_by_intent({}) == "clarify_decide"
+        assert route_by_intent({}) == "retrieve_memories"
 
 
 class TestEventType:

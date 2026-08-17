@@ -37,6 +37,7 @@ class SessionDetail(BaseModel):
     mode: str = "single"
     agents_involved: List[str] = []
     total_time: float = 0.0
+    time_to_first_token: Optional[float] = None
     created_at: str = ""
     # 从 JSON 事件文件恢复的完整数据
     agent_events: List[Dict[str, Any]] = []

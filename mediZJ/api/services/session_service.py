@@ -201,6 +201,9 @@ def _build_detail_from_db(session_data: Dict[str, Any]) -> SessionDetail:
                 assistant_msg["subtasks_completed"] = msg["subtasks_completed"]
             if msg.get("mode"):
                 assistant_msg["mode"] = msg["mode"]
+            # 首 token 用时（秒），可空；旧会话无此字段则不附加
+            if msg.get("time_to_first_token") is not None:
+                assistant_msg["time_to_first_token"] = msg["time_to_first_token"]
             # citations 可能为空列表，始终传递（排除 None 即旧会话无此字段）
             citations_val = msg.get("citations")
             if citations_val is not None:
@@ -231,6 +234,10 @@ def _build_detail_from_db(session_data: Dict[str, Any]) -> SessionDetail:
         mode=session_data.get("mode", "single"),
         agents_involved=list(agents_set),
         total_time=total_time,
+        time_to_first_token=(
+            last_turn.assistant_message.get("time_to_first_token")
+            if last_turn else None
+        ),
         created_at=session_data.get("created_at", ""),
         # 最后一轮的 events/suggestions 用于向后兼容
         agent_events=(

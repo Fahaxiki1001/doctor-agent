@@ -170,10 +170,11 @@ export const useChatStore = defineStore('chat', () => {
               if (firstTokenAt === null && data.answer) {
                 firstTokenAt = performance.now()
               }
+              const clientTtft =
+                firstTokenAt === null ? undefined : (firstTokenAt - requestStartedAt) / 1000
+              // 优先使用后端权威的首 token 用时（秒），客户端测量仅作兜底
               const timeToFirstToken =
-                firstTokenAt === null
-                  ? undefined
-                  : (firstTokenAt - requestStartedAt) / 1000
+                data.time_to_first_token != null ? data.time_to_first_token : clientTtft
               msg.citations = data.citations || []
               msg.assistantMessageId = data.assistant_message_id
               msg.traceId = data.trace_id
@@ -322,6 +323,7 @@ export const useChatStore = defineStore('chat', () => {
                 swarmEnabled: am.mode === 'swarm',
                 agentsInvolved: (am.agents_involved as string[]) || [],
                 totalTime: am.total_time as number,
+                timeToFirstToken: am.time_to_first_token as number | undefined,
                 subtasksCompleted: am.subtasks_completed as number,
                 usage: { total_tokens: (detail.total_tokens as number) || 0 },
                 performanceMetrics: {
@@ -361,6 +363,7 @@ export const useChatStore = defineStore('chat', () => {
               swarmEnabled: detail.mode === 'swarm',
               agentsInvolved: (detail.agents_involved as string[]) || [],
               totalTime: detail.total_time as number,
+              timeToFirstToken: detail.time_to_first_token as number | undefined,
               subtasksCompleted: detail.subtasks_completed as number,
               usage: { total_tokens: (detail.total_tokens as number) || 0 },
               performanceMetrics: {

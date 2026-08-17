@@ -737,7 +737,11 @@ async def _chat_stream_impl(
         "assistant_message_id": persisted.get("assistant_message_id", ""),
         "trace_id": result.get("trace_id", trace_id),
         "total_time": result.get("total_time", 0.0),
-        "time_to_first_token": result.get("first_token_time_ms"),
+        "time_to_first_token": (
+            result["first_token_time_ms"] / 1000
+            if result.get("first_token_time_ms") is not None
+            else None
+        ),
         "swarm_metadata": result.get("swarm_metadata", {}),
         "swarm_enabled": result.get("swarm_enabled", False),
         "agents_involved": result.get("agents_involved", []),
@@ -928,6 +932,11 @@ def _persist_session_turn(
             "redundancy": result.get("performance_metrics", {}).get("redundancy", 0),
             "citations": result.get("citations", []),
             "trace_id": result.get("trace_id", ""),
+            "time_to_first_token": (
+                result["first_token_time_ms"] / 1000
+                if result.get("first_token_time_ms") is not None
+                else None
+            ),
         },
         user_id=request.user_id or "default",
     )
