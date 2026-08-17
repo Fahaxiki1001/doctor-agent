@@ -426,6 +426,79 @@ class TestClarifyInterrupt:
         assert result.get("final_answer") is not None
 
 
+class TestClarifyShortCircuit:
+    """追问轮短路：高置信医疗意图 + 已有历史时不调 clarify LLM"""
+
+    def _coordinator(self, confidence: float, history: list):
+        coordinator = _make_coordinator(MagicMock(), _questionnaire_response())
+        coordinator.short_term_memory.get_recent_messages = AsyncMock(
+            return_value=history
+        )
+        coordinator.intent_classifier = type("IC", (), {
+            "classify": AsyncMock(return_value=IntentResult(
+                intent="medical", confidence=confidence, source="llm", reason="t",
+            )),
+        })()
+        return coordinator
+
+    @pytest.mark.asyncio
+    async def test_skips_llm_on_follow_up_turn(self):
+        history = [
+            {"role": "user", "content": "我发烧了"},
+            {"role": "assistant", "content": "建议先物理降温"},
+        ]
+        coordinator = self._coordinator(0.98, history)
+        registry = MagicMock()
+        registry.get_visible_tools = MagicMock(return_value=[])
+        from mediZJ.lgraph.supervisor_graph import build_supervisor_graph
+        graph = build_supervisor_graph(coordinator, tool_registry=registry,
+                                       hitl_enabled=True)
+
+        result = await graph.ainvoke(
+            {"question": "想吃点药缓解可以吃点什么", "session_id": "s-shortcut"},
+            {"configurable": {"thread_id": "s-shortcut"}},
+        )
+
+        assert "__interrupt__" not in result
+        # clarify 的 LLM 判定被短路
+        assert coordinator.lead_agent.llm_client.chat_with_tools.await_count == 0
+        assert coordinator.lead_agent.llm_client.chat_with_tools_stream.await_count == 0
+        coordinator.lead_agent.assess_and_decompose.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_first_turn_still_calls_llm(self):
+        """首轮无历史：仍走 clarify LLM 判定（会发问卷并挂起）"""
+        coordinator = self._coordinator(0.98, [])
+        registry = MagicMock()
+        registry.get_visible_tools = MagicMock(return_value=[])
+        from mediZJ.lgraph.supervisor_graph import build_supervisor_graph
+        graph = build_supervisor_graph(coordinator, tool_registry=registry,
+                                       hitl_enabled=True)
+
+        result = await graph.ainvoke(
+            {"question": "我头痛还恶心", "session_id": "s-first"},
+            {"configurable": {"thread_id": "s-first"}},
+        )
+        assert "__interrupt__" in result
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_still_calls_llm(self):
+        """置信度低于门限：不短路"""
+        history = [{"role": "user", "content": "我发烧了"}]
+        coordinator = self._coordinator(0.80, history)
+        registry = MagicMock()
+        registry.get_visible_tools = MagicMock(return_value=[])
+        from mediZJ.lgraph.supervisor_graph import build_supervisor_graph
+        graph = build_supervisor_graph(coordinator, tool_registry=registry,
+                                       hitl_enabled=True)
+
+        result = await graph.ainvoke(
+            {"question": "想吃点药缓解可以吃点什么", "session_id": "s-lowconf"},
+            {"configurable": {"thread_id": "s-lowconf"}},
+        )
+        assert "__interrupt__" in result
+
+
 class TestQuestionToolVisibility:
     """question_for_user 仅 LeadAgent 可见（Worker 不可见）"""
 

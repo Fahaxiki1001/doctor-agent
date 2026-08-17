@@ -10,7 +10,7 @@ from loguru import logger
 
 from starlette.requests import Request as StarletteRequest
 
-from mediZJ.swarm.swarm_coordinator import SwarmCoordinator
+from mediZJ.swarm.swarm_coordinator import SwarmCoordinator, split_marker_stream
 from mediZJ.swarm.events import Event
 from mediZJ.api.models.chat import ChatRequest, ChatResponse, Citation
 from mediZJ.api.services.session_runtime import SessionRuntime
@@ -314,6 +314,7 @@ async def _chat_stream_impl(
 
     stream_started_at = _time.monotonic()
     first_token_time_ms: Optional[float] = None
+    _marker_hold = ""  # followups 标记块跨 token 暂存区
     bridge = EventBridge()
     trace_id = str(uuid.uuid4())
     from mediZJ.evolution import EvolutionService
@@ -482,16 +483,22 @@ async def _chat_stream_impl(
 
     def _drain_one(event: Event):
         """处理单个事件：映射类型 → 加入待发送列表或缓冲"""
-        nonlocal first_token_time_ms
+        nonlocal first_token_time_ms, _marker_hold
         mapped_type = _map_event_type(event.type.value)
 
         # 仅透传最终回答 token。Swarm Worker 的中间产物不得进入正文。
         if mapped_type == "agent_content_delta":
             if event.data.get("is_final"):
                 token = event.data.get("token") or ""
-                if token and first_token_time_ms is None:
+                # 过滤 followups 标记块，避免注释文本出现在正文
+                token, _marker_hold = split_marker_stream(_marker_hold + token)
+                if not token:
+                    return
+                if first_token_time_ms is None:
                     first_token_time_ms = (_time.monotonic() - stream_started_at) * 1000
-                _yield_event(mapped_type, event.to_dict())
+                evt_dict = event.to_dict()
+                evt_dict["data"]["token"] = token
+                _yield_event(mapped_type, evt_dict)
             return
 
         # thinking 事件进入批量缓冲

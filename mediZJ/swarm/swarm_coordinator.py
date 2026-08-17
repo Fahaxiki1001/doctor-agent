@@ -31,6 +31,58 @@ from mediZJ.memory import (
     PersonalProfile,
 )
 
+# 追问建议标记块：模型在正文末尾输出 <!--followups: 问题A|问题B|问题C-->
+# 由 parse_followups 解析并从正文剥离，流式链路由 split_marker_stream 逐 token 过滤
+FOLLOWUPS_RE = re.compile(r"<!--\s*followups:(.*?)-->", re.DOTALL | re.IGNORECASE)
+_MARKER_OPEN = "<!--"
+_MARKER_CLOSE = "-->"
+
+
+def parse_followups(text: str) -> tuple:
+    """从正文中解析并剥离 followups 标记块
+
+    Returns:
+        (剥离标记后的正文, 追问问题列表)。无标记块时返回 (原文, [])
+    """
+    if not text or not FOLLOWUPS_RE.search(text):
+        return text, []
+
+    items: List[str] = []
+    for match in FOLLOWUPS_RE.finditer(text):
+        for raw in match.group(1).split("|"):
+            item = raw.strip().strip("-•").strip()
+            if item:
+                items.append(item)
+
+    clean = FOLLOWUPS_RE.sub("", text).rstrip()
+    return clean, items[:3]
+
+
+def split_marker_stream(buffer: str) -> tuple:
+    """流式过滤：从缓冲区切出可立即下发的文本与需继续暂存的尾巴
+
+    标记块不得出现在前端正文（markdown-it 配置 html=False，注释会被当纯文本渲染）。
+    尾部出现 `<!--` 的完整或部分前缀时暂存，等到 `-->` 出现后整段丢弃。
+
+    Returns:
+        (可下发文本, 需暂存文本)
+    """
+    if _MARKER_OPEN in buffer:
+        head, _, rest = buffer.partition(_MARKER_OPEN)
+        if _MARKER_CLOSE in rest:
+            _, _, after = rest.partition(_MARKER_CLOSE)
+            emit, hold = split_marker_stream(head + after)
+            return emit, hold
+        return head, _MARKER_OPEN + rest
+
+    # 尾部可能是被 token 边界切断的 `<!--` 前缀
+    for size in range(len(_MARKER_OPEN) - 1, 0, -1):
+        if buffer.endswith(_MARKER_OPEN[:size]):
+            return buffer[:-size], buffer[-size:]
+
+    return buffer, ""
+
+
 # Trace 惰性导入
 try:
     from mediZJ.trace.context import traced_span
@@ -648,7 +700,15 @@ class SwarmCoordinator:
 
     @staticmethod
     def extract_suggestions(final_answer: str) -> List[str]:
-        """从最终答案中提取建议（简化实现）"""
+        """提取追问建议
+
+        优先取模型输出的 followups 标记块（用户视角的追问问题）；
+        无标记块时回退到旧行为：抄 `## ✅ 核心建议` 的编号项。
+        """
+        _, followups = parse_followups(final_answer)
+        if followups:
+            return followups
+
         suggestions = []
 
         # 匹配 ## 核心建议 章节（标题可带 emoji 前缀，兼容【核心建议】旧格式）

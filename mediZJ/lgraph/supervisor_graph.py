@@ -187,6 +187,8 @@ def build_supervisor_graph(
 
     # clarify 最大轮数（LLM 自决 + 硬上限）
     _CLARIFY_MAX_ROUNDS = 3
+    # 追问轮短路的意图置信度门限
+    _CLARIFY_SKIP_CONFIDENCE = 0.95
 
     async def _clarify_decide(state: SupervisorState) -> dict:
         """节点: 澄清决策——LLM 判断是否需要（继续）发问卷
@@ -247,6 +249,20 @@ def build_supervisor_graph(
                     state.get("clarify_rounds", [])
                 ),
             }
+
+        # 追问轮短路：高置信度医疗意图 + 已有对话历史时，不再花一次 LLM 判断是否追问
+        # （历史里已有上一轮的症状描述与结论，此处判定几乎恒为"无需追问"）
+        if (
+            current_round == 0
+            and state.get("intent") == "medical"
+            and state.get("intent_confidence", 0.0) >= _CLARIFY_SKIP_CONFIDENCE
+            and state.get("recent_history")
+        ):
+            logger.info("[SupervisorGraph] clarify 短路：追问轮且意图高置信，跳过 LLM 判定")
+            think_start = time.monotonic()
+            _emit_clarify_thinking("已有上一轮对话信息，无需追问，直接进入分析。", "skipped")
+            _emit_clarify_done("skipped")
+            return {"clarify_complete": True, "collected_info": ""}
 
         # 构建上下文（含已收集答案，供 LLM 判断是否还需追问）
         from mediZJ.core.prompt_loader import PromptLoader as _PL
@@ -564,6 +580,10 @@ def build_supervisor_graph(
         msg_count = result.get("message_count", 0)
         citations = result.get("references", [])
 
+        # 剥离 followups 标记块（正文不得含标记，建议区单独使用）
+        from mediZJ.swarm.swarm_coordinator import parse_followups
+        final_answer, followups = parse_followups(final_answer)
+
         # 保存 SessionSummary
         coordinator._save_session_summary(
             session_id=state["session_id"],
@@ -611,7 +631,7 @@ def build_supervisor_graph(
                 f"单任务路由到 {agent_id}" if len(subtasks) == 1
                 else "无可用子任务，降级到 ConsultationAgent"
             ),
-            "suggestions": coordinator.extract_suggestions(final_answer),
+            "suggestions": followups or coordinator.extract_suggestions(final_answer),
         }
 
     async def _chat_reply_node(state: SupervisorState) -> dict:
@@ -907,6 +927,10 @@ def build_supervisor_graph(
             lead_agent.set_on_thinking(None)
             lead_agent.set_on_thinking_done(None)
 
+        # 剥离 followups 标记块（正文不得含标记，建议区单独使用）
+        from mediZJ.swarm.swarm_coordinator import parse_followups
+        final_answer, followups = parse_followups(final_answer)
+
         # 程序化追加参考资料章节
         if swarm_citations:
             ref_section = coordinator.format_references_section(swarm_citations)
@@ -944,7 +968,7 @@ def build_supervisor_graph(
             "citations": swarm_citations,
             "usage": swarm_usage,
             "agents_involved": completed_agents,
-            "suggestions": coordinator.extract_suggestions(final_answer),
+            "suggestions": followups or coordinator.extract_suggestions(final_answer),
             "timeout_occurred": timeout_occurred,
             "swarm_metadata": {
                 "num_subtasks": len(state.get("subtasks", [])),

@@ -572,6 +572,12 @@ def _rebuild_events_from_md(content: str, detail: SessionDetail):
                 },
             )
 
+    # 优先使用 followups 标记块（历史文件可能仍含未剥离的标记）
+    from mediZJ.swarm.swarm_coordinator import parse_followups
+    content, followups = parse_followups(content)
+    if followups:
+        detail.suggestions = followups
+
     suggestions_match = re.search(
         r"(?:【核心建议】|##\s*\S*\s*核心建议)\s*\n([\s\S]*?)(?=\n---|\n(?:## |【))",
         content,
@@ -580,7 +586,7 @@ def _rebuild_events_from_md(content: str, detail: SessionDetail):
         items = re.findall(
             r"\*\*\d+\.\s*(.+?)\*\*", suggestions_match.group(1)
         )
-        if items:
+        if items and not followups:
             detail.suggestions = items[:5]
 
     detail.agent_events = events
