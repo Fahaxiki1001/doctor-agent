@@ -329,8 +329,8 @@ class TestClarifyInterrupt:
         release_runtime("s-cap")
 
     @pytest.mark.asyncio
-    async def test_clarify_before_retrieve_memories(self):
-        """节点顺序：medical 意图下，记忆检索发生在 clarify 完成后、任务分解之前。"""
+    async def test_retrieve_memories_before_clarify(self):
+        """节点顺序：medical 意图下，记忆检索发生在 clarify 之前（供澄清判断参考）。"""
         from mediZJ.api.services.session_runtime import (
             clear_answer_queue, release_runtime,
         )
@@ -348,20 +348,18 @@ class TestClarifyInterrupt:
         config = {"configurable": {"thread_id": "s-order"}}
         from langgraph.types import Command
 
-        # 首次：interrupt 挂起（尚未检索记忆）
+        # 首次：interrupt 挂起。此时记忆检索已在 clarify 之前完成，但尚未任务分解
         result = await graph.ainvoke(
             {"question": "头痛还恶心，怎么回事", "session_id": "s-order"},
             config,
         )
         assert "__interrupt__" in result
-        # 首次挂起时不应已检索记忆 / 不应已任务分解
-        coordinator.short_term_memory.get_recent_messages.assert_not_awaited()
+        coordinator.short_term_memory.get_recent_messages.assert_awaited()
         coordinator.lead_agent.assess_and_decompose.assert_not_awaited()
 
-        # resume → 澄清完成 → 才检索记忆 → 任务分解
+        # resume → 澄清完成 → 任务分解
         final = await graph.ainvoke(Command(resume={"q0": "35"}), config)
         assert "__interrupt__" not in final
-        coordinator.short_term_memory.get_recent_messages.assert_awaited()
         coordinator.lead_agent.assess_and_decompose.assert_awaited_once()
 
         clear_answer_queue("s-order")

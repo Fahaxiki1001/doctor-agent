@@ -651,11 +651,10 @@ class SwarmCoordinator:
         """从最终答案中提取建议（简化实现）"""
         suggestions = []
 
-        # 匹配 ## 核心建议 章节（兼容【核心建议】旧格式）
-        if "## 核心建议" in final_answer or "【核心建议】" in final_answer:
-            # 查找章节起始位置
-            start_marker = "## 核心建议" if "## 核心建议" in final_answer else "【核心建议】"
-            start_idx = final_answer.find(start_marker) + len(start_marker)
+        # 匹配 ## 核心建议 章节（标题可带 emoji 前缀，兼容【核心建议】旧格式）
+        header_match = re.search(r'(?:##\s*\S*\s*核心建议|【核心建议】)', final_answer)
+        if header_match:
+            start_idx = header_match.end()
             # 查找下一个 ## 标题作为结束边界
             end_match = re.search(r'\n## ', final_answer[start_idx:])
             if end_match:

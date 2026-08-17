@@ -96,10 +96,10 @@ async def classify_intent(coordinator, question: str) -> Dict[str, Any]:
 
 
 def route_by_intent(state: Dict[str, Any]) -> str:
-    """根据意图路由：others（寒暄/无关话题）→ 闲聊直答；medical → 澄清流程。"""
+    """根据意图路由：others（寒暄/无关话题）→ 闲聊直答；medical → 先检索记忆再澄清。"""
     if state.get("chat_mode") or state.get("intent") == "others":
         return "chat_reply"
-    return "clarify_decide"
+    return "retrieve_memories"
 
 
 def build_supervisor_graph(
@@ -158,13 +158,17 @@ def build_supervisor_graph(
         return result
 
     async def _retrieve_memories(state: SupervisorState) -> dict:
-        """节点: 检索短期记忆 + 长期记忆（位于 clarify 之后、任务分解之前）"""
-        result = await retrieve_memories_with_intent_gate(
-            coordinator=coordinator,
-            session_id=state["session_id"],
-            question=state["question"],
-            intent=state.get("intent", "medical"),
-        )
+        """节点: 检索短期记忆 + 长期记忆（位于 clarify 之前，供澄清判断参考）"""
+        try:
+            result = await retrieve_memories_with_intent_gate(
+                coordinator=coordinator,
+                session_id=state["session_id"],
+                question=state["question"],
+                intent=state.get("intent", "medical"),
+            )
+        except BaseException as exc:
+            logger.warning(f"记忆检索失败，使用空记忆继续: {exc}")
+            result = {"recent_history": [], "similar_memories": [], "context": {}}
 
         # 刷新 Worker 档案（含已验证的应答策略）
         verified = state.get("context", {}).get("verified_experiences", "")
@@ -612,7 +616,7 @@ def build_supervisor_graph(
 
     async def _chat_reply_node(state: SupervisorState) -> dict:
         """节点: 闲聊模式——others 意图时 LeadAgent 直接聊天回应，跳过任务分解"""
-        # retrieve_memories 位于 clarify 之后，闲聊分支未执行；此处自检索完整历史
+        # 闲聊分支不经过 retrieve_memories 节点，此处自检索完整历史
         recent_history: List[Dict[str, Any]] = []
         try:
             recent_history = await coordinator.short_term_memory.get_recent_messages(
@@ -993,10 +997,10 @@ def build_supervisor_graph(
     # ===== 条件路由函数 =====
 
     def _route_clarify(state: SupervisorState) -> str:
-        """澄清路由：有 pending 问卷 → clarify_ask 挂起；否则 → 检索记忆"""
+        """澄清路由：有 pending 问卷 → clarify_ask 挂起；否则 → 任务分解"""
         if state.get("clarify_pending"):
             return "clarify_ask"
-        return "retrieve_memories"
+        return "assess_decompose"
 
     def _route_by_subtask_count(state: SupervisorState) -> str:
         """根据子任务数量路由"""
@@ -1054,31 +1058,31 @@ def build_supervisor_graph(
     # 边连接
     builder.add_edge(START, "intent_classify")
 
-    # 意图路由：others（寒暄/无关话题）→ 闲聊直答；医疗 → 澄清 → 检索 → 分解
+    # 意图路由：others（寒暄/无关话题）→ 闲聊直答；医疗 → 检索记忆 → 澄清 → 分解
     builder.add_conditional_edges(
         "intent_classify",
         route_by_intent,
         {
             "chat_reply": "chat_reply",
-            "clarify_decide": "clarify_decide",
+            "retrieve_memories": "retrieve_memories",
         }
     )
 
-    # clarify 多轮循环：decide → (有问卷) ask → decide；无问卷 → 检索记忆
+    # 先检索记忆（供澄清判断参考）→ 再澄清决策
+    builder.add_edge("retrieve_memories", "clarify_decide")
+
+    # clarify 多轮循环：decide → (有问卷) ask → decide；无问卷 → 任务分解
     builder.add_conditional_edges(
         "clarify_decide",
         _route_clarify,
         {
             "clarify_ask": "clarify_ask",
-            "retrieve_memories": "retrieve_memories",
+            "assess_decompose": "assess_decompose",
         }
     )
     builder.add_edge("clarify_ask", "clarify_decide")
 
     builder.add_edge("chat_reply", "finalize")
-
-    # 先澄清完成 → 再检索记忆 → 最后任务分解
-    builder.add_edge("retrieve_memories", "assess_decompose")
 
     # 条件路由：single / swarm / fallback
     builder.add_conditional_edges(
@@ -1117,12 +1121,32 @@ def build_supervisor_graph(
 # ===== 辅助函数 =====
 
 def _build_clarify_context(state: SupervisorState) -> str:
-    """构建 clarify 决策阶段的上下文文本（个人档案/近期历史/历史案例）"""
+    """构建 clarify 决策阶段的上下文文本（个人档案/近期历史正文/历史案例计数）
+
+    近期历史写入实际正文（最近 6 条、单条截断 300 字），供 LLM 判断
+    已知信息是否已足够，避免重复追问用户已经说过的内容。
+    """
     parts = []
     if state.get("personal_profile"):
         parts.append(f"## 用户档案\n{state['personal_profile']}")
-    if state.get("recent_history"):
-        parts.append(f"近期对话: {len(state['recent_history'])} 条消息")
+
+    recent = state.get("recent_history") or []
+    if recent:
+        lines = []
+        for msg in recent[-6:]:
+            role = "用户" if msg.get("role") == "user" else "助手"
+            content = (msg.get("content") or "").strip()
+            if not content:
+                continue
+            if len(content) > 300:
+                content = content[:300] + "…"
+            lines.append(f"- {role}：{content}")
+        if lines:
+            parts.append(
+                "## 近期对话（以下为已知信息，不得就其中已明确的内容重复追问）\n"
+                + "\n".join(lines)
+            )
+
     if state.get("similar_memories"):
         parts.append(f"历史相似案例: {len(state['similar_memories'])} 个")
     return "\n\n".join(parts) if parts else "无"

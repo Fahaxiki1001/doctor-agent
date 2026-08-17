@@ -566,7 +566,8 @@ def _rebuild_events_from_md(content: str, detail: SessionDetail):
             )
 
     suggestions_match = re.search(
-        r"(?:【核心建议】|## 核心建议)\s*\n([\s\S]*?)(?=\n---|\n(?:## |【))", content
+        r"(?:【核心建议】|##\s*\S*\s*核心建议)\s*\n([\s\S]*?)(?=\n---|\n(?:## |【))",
+        content,
     )
     if suggestions_match:
         items = re.findall(
