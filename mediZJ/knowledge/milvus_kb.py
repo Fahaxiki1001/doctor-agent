@@ -12,11 +12,14 @@
 """
 import json
 import math
+import os
 import threading
 from contextlib import contextmanager
 from functools import wraps
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+
+import numpy as np
 from loguru import logger
 
 from pymilvus import (
@@ -28,6 +31,26 @@ from mediZJ.knowledge.entity_index import MedicalEntityIndex
 from mediZJ.memory.embedding import load_embedding_model
 
 COLLECTION_NAME = "medical_knowledge_v2"
+
+# 语义相关性门控阈值（余弦相似度）。低于该值的召回视为不相关，直接不返回，
+# 避免库内没有对应文档时把最相近的无关文档当成证据引用。
+# 实测标定（bge-small-zh-v1.5，clinical_guideline）：命中 0.81~0.84，未命中 0.49~0.59。
+# 设为 0 可关闭门控，回退到改动前行为。
+_DEFAULT_MIN_RELEVANCE = float(os.getenv("KB_MIN_RELEVANCE", "0.65"))
+
+
+def _cosine_relevance(query_vector, doc_vector) -> Optional[float]:
+    """query 与文档向量的余弦相似度（两侧均已 L2 归一化，点积即余弦）
+
+    拿不到向量时返回 None —— 上层视为放行，保证检索不因缺少相关度而整体失效。
+    """
+    if doc_vector is None or query_vector is None:
+        return None
+    try:
+        return float(np.dot(np.asarray(query_vector), np.asarray(doc_vector)))
+    except (TypeError, ValueError) as e:
+        logger.warning(f"Relevance computation failed: {e}")
+        return None
 
 
 def _serialized(func):
@@ -285,8 +308,12 @@ class MedicalKnowledgeBase:
         query: str,
         top_k: int,
         filter_expr: Optional[str],
-    ) -> List[Dict[str, Any]]:
-        """Path 1+2: Dense + BM25 混合检索（Milvus RRF）"""
+    ) -> tuple:
+        """Path 1+2: Dense + BM25 混合检索（Milvus RRF）
+
+        Returns:
+            (hits, query_vector)。query_vector 供上层计算语义相关度（余弦）。
+        """
         query_vector = self.embedding_model.encode(
             [query], normalize_embeddings=True,
         )[0]
@@ -315,19 +342,19 @@ class MedicalKnowledgeBase:
             limit=top_k * 3,
             output_fields=[
                 "id", "doc_id", "doc_type", "chunk_id",
-                "total_chunks", "text",
+                "total_chunks", "text", "dense_vector",
             ],
         )
 
         if not results or len(results) == 0:
-            return []
+            return [], query_vector
 
         # 安全加固：在第一优先级进行异常值过滤与防护
         for hit in results[0]:
             dist = hit.get("distance", 0.0)
             if math.isnan(dist) or math.isinf(dist) or dist < 0:
                 hit["distance"] = 0.0
-        return results[0]
+        return results[0], query_vector
 
     @_serialized
     def search(
@@ -335,6 +362,7 @@ class MedicalKnowledgeBase:
         query: str,
         top_k: int = 5,
         filter_type: Optional[str] = None,
+        min_relevance: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
         """
         三路混合检索。
@@ -343,13 +371,20 @@ class MedicalKnowledgeBase:
             query: 查询文本
             top_k: 返回 Top-K 个去重文档
             filter_type: 可选文档类型过滤
+            min_relevance: 语义相关性下限（余弦），缺省取 KB_MIN_RELEVANCE（0.65）。
+                低于该值的召回会被丢弃——库内没有对应文档时宁可返回空，
+                也不要把最相近的无关文档当作证据。
 
         Returns:
-            文档列表，每个文档含 ``id``, ``content``, ``metadata``, ``score``
+            文档列表，每个文档含 ``id``, ``content``, ``metadata``, ``score``（RRF 融合分，
+            仅用于排序）, ``relevance``（余弦相似度，用于判断是否真的相关）
         """
+        threshold = (
+            _DEFAULT_MIN_RELEVANCE if min_relevance is None else min_relevance
+        )
         logger.debug(
             f"Hybrid search: query={query[:80]} top_k={top_k} "
-            f"filter_type={filter_type}"
+            f"filter_type={filter_type} min_relevance={threshold}"
         )
 
         _ctx = traced_span(SpanType.TOOL, name="knowledge_search") if _TRACE_AVAILABLE else _noop_ctx()
@@ -368,7 +403,7 @@ class MedicalKnowledgeBase:
                 f'doc_type == "{filter_type}"' if filter_type else None
             )
             try:
-                hits = self._hybrid_search(query, top_k, filter_expr)
+                hits, query_vector = self._hybrid_search(query, top_k, filter_expr)
             except Exception as e:
                 logger.error(f"Hybrid search failed: {e}")
                 if t:
@@ -379,16 +414,18 @@ class MedicalKnowledgeBase:
             ENTITY_BONUS_COEFFICIENT = 0.15
             RRF_K = 60
 
-            # 由于内置 RRF 返回的最终得分可能已被归一化（0~1范围）或为经典 RRF 倒数和，
-            # 为保证在混合搜索召回时分值稳定不溢出崩溃，引入最大距离动态截断保护
-            max_raw_score = max([h.get("distance", 0.0) for h in hits]) if hits else 0.0
-            normalization_factor = max_raw_score if max_raw_score > 0 else (2.0 / (RRF_K + 1))
+            # 归一化因子固定为两路检索均排第一时的 RRF 理论上界。
+            # 不能用「本次结果集内的最高分」——那会让 top1 恒为 1.0，与真实相关度无关。
+            normalization_factor = 2.0 / (RRF_K + 1)
 
             scoring_detail = []
             for hit in hits:
                 doc_id = hit.get("entity", {}).get("doc_id", "")
                 hit["_doc_id"] = doc_id
                 hit["_text"] = hit.get("entity", {}).get("text", "")
+                hit["_relevance"] = _cosine_relevance(
+                    query_vector, hit.get("entity", {}).get("dense_vector")
+                )
 
                 raw_rrf = hit.get("distance", 0.0)
                 # 进行比例归一化缩放
@@ -403,6 +440,10 @@ class MedicalKnowledgeBase:
                     "normalized_rrf": round(normalized_rrf, 4),
                     "entity_bonus": round(bonus, 4),
                     "final_score": round(hit["final_score"], 4),
+                    "relevance": (
+                        round(hit["_relevance"], 4)
+                        if hit["_relevance"] is not None else None
+                    ),
                 })
 
             # Step 4: 按 final_score 重排
@@ -424,12 +465,39 @@ class MedicalKnowledgeBase:
                             "type": hit.get("entity", {}).get("doc_type", ""),
                         },
                         "score": round(score, 4),
+                        "relevance": (
+                            round(hit["_relevance"], 4)
+                            if hit.get("_relevance") is not None else None
+                        ),
                     }
 
             # Step 6: 按分数排序，取 top_k
             top_docs = sorted(
                 seen_docs.values(), key=lambda d: d["score"], reverse=True,
             )[:top_k]
+
+            # Step 6.5: 语义相关性门控——宁可返回空，也不要把无关文档当成证据
+            if threshold > 0:
+                kept = []
+                for doc in top_docs:
+                    rel = doc.get("relevance")
+                    if rel is None:
+                        logger.warning(
+                            f"Relevance unavailable for {doc['metadata'].get('doc_id')}, "
+                            "passing through without gating"
+                        )
+                        kept.append(doc)
+                    elif rel >= threshold:
+                        kept.append(doc)
+                    else:
+                        logger.debug(
+                            f"Filtered irrelevant doc {doc['metadata'].get('doc_id')} "
+                            f"(relevance={rel} < {threshold})"
+                        )
+                filtered_count = len(top_docs) - len(kept)
+                top_docs = kept
+            else:
+                filtered_count = 0
 
             # Step 7: 还原完整文档内容（拼接所有 chunk），补充完整 metadata
             for doc in top_docs:
@@ -453,8 +521,11 @@ class MedicalKnowledgeBase:
                     "entity_boost_matches": len(entity_boost),
                     "raw_candidates": len(hits),
                     "scoring_top5": scoring_detail[:5],
+                    "min_relevance": threshold,
+                    "filtered_by_relevance": filtered_count,
                     "final_count": len(top_docs),
                     "top_score": top_docs[0]["score"] if top_docs else 0,
+                    "top_relevance": top_docs[0].get("relevance") if top_docs else None,
                 }, ensure_ascii=False)
                 t.tool_attrs.success = len(top_docs) > 0
 

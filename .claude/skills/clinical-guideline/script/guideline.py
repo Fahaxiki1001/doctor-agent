@@ -43,11 +43,14 @@ async def clinical_guideline(query: str, max_results: int = 1) -> Dict[str, Any]
         filter_type="clinical_guideline"
     )
 
-    if results and results[0]["score"] > 0.1:
+    if results:
         doc = results[0]
         metadata = doc["metadata"]
         content = doc["content"]
-        ref_score = doc["score"]
+        # 展示与记录用真实语义相关度（余弦），不用 RRF 融合分——后者不代表相关性
+        ref_score = doc.get("relevance")
+        if ref_score is None:
+            ref_score = doc.get("score", 0.0)
 
         references = [{
             "index": 1,

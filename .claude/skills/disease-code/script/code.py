@@ -42,7 +42,7 @@ async def disease_code(disease_name: str) -> Dict[str, Any]:
         filter_type="disease_classification"
     )
 
-    if results and results[0]["score"] > 0.1:
+    if results:
         doc = results[0]
         metadata = doc["metadata"]
 

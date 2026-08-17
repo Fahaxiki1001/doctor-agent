@@ -85,7 +85,7 @@ async def assess_risk(symptoms: str) -> Dict[str, Any]:
             top_k=1,
             filter_type=None
         )
-        if results and results[0]["score"] > 0.5:
+        if results:
             kb_advice = results[0]["content"][:300]  # 限制长度
     except Exception as e:
         logger.warning(f"Failed to get KB advice: {e}")

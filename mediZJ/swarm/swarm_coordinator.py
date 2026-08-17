@@ -83,6 +83,33 @@ def split_marker_stream(buffer: str) -> tuple:
     return buffer, ""
 
 
+# 正文中的引用标注：[1]、[1,2]、[1，2]（与前端 useMarkdown.ts 的写法保持一致，区间 [1-3] 暂不支持）
+CITATION_RE = re.compile(r"\[(\d+(?:\s*[,，]\s*\d+)*)\]")
+
+
+def used_citation_indexes(text: str) -> set:
+    """正文中实际出现的引用编号集合"""
+    used = set()
+    for match in CITATION_RE.finditer(text or ""):
+        for part in re.split(r"[,，]", match.group(1)):
+            part = part.strip()
+            if part.isdigit():
+                used.add(int(part))
+    return used
+
+
+def filter_used_citations(text: str, citations: List[Dict]) -> List[Dict]:
+    """只保留正文里真正引用过的 citation
+
+    编号保持原值不重排——正文里的 [3] 不能因为 [1][2] 未被引用就变成 [1]。
+    模型完全没标注引用时返回空列表，调用方据此不追加参考资料章节。
+    """
+    if not citations:
+        return []
+    used = used_citation_indexes(text)
+    return [c for c in citations if c.get("index") in used]
+
+
 # Trace 惰性导入
 try:
     from mediZJ.trace.context import traced_span

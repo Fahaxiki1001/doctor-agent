@@ -42,7 +42,7 @@ async def recommend_lifestyle(diagnosis: str) -> Dict[str, Any]:
         filter_type="lifestyle"
     )
 
-    if results and results[0]["score"] > 0.1:
+    if results:
         doc = results[0]
         content = doc["content"]
 

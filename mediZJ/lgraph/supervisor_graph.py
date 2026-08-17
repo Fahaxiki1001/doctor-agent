@@ -596,6 +596,10 @@ def build_supervisor_graph(
             message_count=msg_count,
         )
 
+        # 只保留正文真正引用过的来源：模型没标注 [N] 就不挂参考资料
+        from mediZJ.swarm.swarm_coordinator import filter_used_citations
+        citations = filter_used_citations(final_answer, citations)
+
         # 程序化追加参考资料章节
         if citations:
             ref_section = coordinator.format_references_section(citations)
@@ -928,8 +932,14 @@ def build_supervisor_graph(
             lead_agent.set_on_thinking_done(None)
 
         # 剥离 followups 标记块（正文不得含标记，建议区单独使用）
-        from mediZJ.swarm.swarm_coordinator import parse_followups
+        from mediZJ.swarm.swarm_coordinator import (
+            filter_used_citations,
+            parse_followups,
+        )
         final_answer, followups = parse_followups(final_answer)
+
+        # 只保留正文真正引用过的来源：模型没标注 [N] 就不挂参考资料
+        swarm_citations = filter_used_citations(final_answer, swarm_citations)
 
         # 程序化追加参考资料章节
         if swarm_citations:

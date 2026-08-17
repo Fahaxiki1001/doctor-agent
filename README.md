@@ -1227,16 +1227,17 @@ python mediZJ/knowledge/scripts/deduplicate.py
 | 阶段 | 方法 | 公式 |
 |------|------|------|
 | **Path 1+2 融合** | Milvus RRF (RRFRanker, k=60) | `RRF(d) = 1/(60+rank_dense) + 1/(60+rank_sparse)` |
-| **RRF 归一化** | 动态最大距离归一化 | `normalized = raw_rrf / max_raw_score` |
+| **RRF 归一化** | 固定理论上界归一化 | `normalized = raw_rrf / (2/(60+1))` |
 | **Path 3 加权** | App-level Entity Boost | `bonus = entity_hit_count(d) / max_hits × 0.15` |
-| **最终得分** | 上界截断 | `final_score = min(normalized + bonus, 1.0)` |
+| **最终得分** | 上界截断 | `final_score = min(normalized + bonus, 1.0)`（仅用于排序） |
+| **相关性门控** | query 与文档向量余弦 | `relevance < KB_MIN_RELEVANCE(0.65)` 的召回直接丢弃 |
 | **去重** | 按 `doc_id` 保留最高分 | 每份文档只返回最匹配的一个 chunk |
 
 #### 完整计分公式
 
 ```
 final_score(d) = min( ──────────────────────  +  ────────────────────── × 0.15 , 1.0 )
-                         max_raw_score                     max_hits
+                        2 / (60 + 1)                      max_hits
                          ↑                                 ↑
                     Path 1+2 RRF 贡献               Path 3 Entity 贡献
 
@@ -1244,9 +1245,15 @@ final_score(d) = min( ───────────────────�
   rank_dense  = Path 1 IP 检索排序序号
   rank_sparse = Path 2 BM25 检索排序序号
   raw_rrf = 1/(60+rank_dense) + 1/(60+rank_sparse)
-  max_raw_score = 所有候选 hit 中的最大 raw_rrf 值，用于动态归一化
+  归一化因子固定为 2/(60+1)，即两路均排第一时的 RRF 理论上界。
+    不可用"候选集内最高分"做因子——那会让 top1 恒为 1.0，与真实相关度无关。
   entity_hit_count(d) = 查询中的医学实体在文档 d 中出现的去重种数
   max_hits = 所有文档中最高的 entity_hit_count，用于归一化到 [0,1]
+
+相关性判定独立于 final_score:
+  relevance(d) = cos(query_vector, dense_vector(d))
+  低于 KB_MIN_RELEVANCE（默认 0.65）的召回在返回前丢弃；
+  实测标定：命中 0.81~0.84，库内无对应文档时最相近的无关文档 0.49~0.59。
 ```
 
 #### 双路差异与互补

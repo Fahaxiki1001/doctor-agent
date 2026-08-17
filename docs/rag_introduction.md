@@ -92,10 +92,12 @@ Milvus RRF 结果返回后，在应用层叠加 Entity Boost：
 ```python
 ENTITY_BONUS_COEFFICIENT = 0.15
 
-normalized_rrf = raw_rrf / MAX_RRF_SCORE     # RRF 分数归一化
+normalized_rrf = raw_rrf / (2 / (RRF_K + 1))  # 固定因子：两路均排第一时的 RRF 理论上界
 bonus = entity_boost.get(doc_id, 0.0) * 0.15  # 实体加权
-final_score = min(normalized_rrf + bonus, 1.0)  # 上限 1.0
+final_score = min(normalized_rrf + bonus, 1.0)  # 上限 1.0，仅用于排序
 ```
+
+**注意**：`final_score` 是排序分，不是相关性度量——RRF 只由排名决定，即使全库都不相关，排第一的仍会拿到高分。相关性由独立的 `relevance`（query 与文档向量的余弦）承担，低于 `KB_MIN_RELEVANCE`（默认 0.65）的召回在 `search()` 返回前被丢弃，避免把最相近的无关文档当作证据引用。
 
 **设计意图**：Milvus RRF 依赖 embedding / BM25 做语义匹配，对精确术语不敏感（如"心肌梗死"和"心梗"语义近但词面不同）。Entity Boost 作为确定性补充，当 query 中出现与知识库文档精确匹配的医学实体时给予固定加分，保证术语级检索准确率。
 

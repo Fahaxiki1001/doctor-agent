@@ -52,11 +52,15 @@ async def search_knowledge(query: str, max_results: int = 5) -> Dict[str, Any]:
     for i, doc in enumerate(results, 1):
         metadata = doc["metadata"]
         content = doc["content"]
+        # 相关度用余弦（真实语义相关性），缺省回退 RRF 融合分
+        rel = doc.get("relevance")
+        if rel is None:
+            rel = doc.get("score", 0.0)
         formatted_results.append({
             "title": f"关于{metadata.get('disease', query)}的医学信息",
             "content": content,
             "source": metadata.get("source", "医学知识库"),
-            "score": doc["score"],
+            "score": rel,
             "type": metadata.get("type"),
             "index": i,
         })
@@ -67,7 +71,7 @@ async def search_knowledge(query: str, max_results: int = 5) -> Dict[str, Any]:
             "disease": metadata.get("disease", ""),
             "type": metadata.get("type", ""),
             "filename": metadata.get("filename", ""),
-            "score": doc["score"],
+            "score": rel,
             "snippet": content[:200] + ("..." if len(content) > 200 else ""),
             "content": content,
         })
