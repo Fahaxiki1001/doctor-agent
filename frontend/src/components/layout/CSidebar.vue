@@ -180,18 +180,20 @@ watch(
 </script>
 
 <template>
-  <aside class="w-60 h-screen bg-slate-800 text-slate-200 flex flex-col shrink-0 overflow-hidden">
+  <aside
+    class="w-60 h-screen flex flex-col shrink-0 overflow-hidden text-slate-200 bg-gradient-to-b from-slate-900 to-slate-800 border-r border-white/5"
+  >
     <!-- Logo -->
-    <div class="p-4 border-b border-slate-700">
-      <div class="flex items-center gap-2">
+    <div class="px-4 py-4 border-b border-white/5">
+      <div class="flex items-center gap-2.5">
         <div
-          class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold text-sm"
+          class="w-9 h-9 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center text-white font-bold shadow-sm"
         >
           M
         </div>
-        <div>
-          <div class="text-sm font-semibold text-white">MediZJ</div>
-          <div class="text-xs text-slate-400">多智能体医疗助手</div>
+        <div class="min-w-0">
+          <div class="text-sm font-semibold text-white leading-tight">MediZJ</div>
+          <div class="text-[11px] text-slate-400 mt-0.5">健康咨询助手</div>
         </div>
       </div>
     </div>
@@ -200,7 +202,7 @@ watch(
     <div class="p-3">
       <button
         @click="newChat"
-        class="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition flex items-center justify-center gap-2"
+        class="w-full py-2.5 px-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white text-sm font-medium rounded-xl shadow-sm hover:shadow-md hover:-translate-y-px transition-all flex items-center justify-center gap-2"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -220,13 +222,17 @@ watch(
         v-for="item in navItems"
         :key="item.path"
         :to="item.path"
-        class="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition"
+        class="relative flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl transition"
         :class="
           route.path.startsWith(item.path)
-            ? 'bg-slate-700 text-white'
-            : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
+            ? 'bg-white/10 text-white font-medium'
+            : 'text-slate-300 hover:bg-white/5 hover:text-white'
         "
       >
+        <span
+          v-if="route.path.startsWith(item.path)"
+          class="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-blue-400"
+        />
         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" :d="item.icon" />
         </svg>
@@ -236,8 +242,10 @@ watch(
 
     <!-- 最近会话列表 -->
     <div class="group/sessions flex-1 flex flex-col min-h-0 mt-2 px-3 overflow-hidden">
-      <div class="shrink-0 px-3 pt-1.5 pb-3 text-sm text-slate-400 font-medium">最近会话</div>
-      <div class="flex-1 min-h-0 overflow-y-auto pb-2 scrollbar-thin relative">
+      <div class="shrink-0 px-3 pt-1.5 pb-3 text-xs text-slate-500 font-medium uppercase tracking-wide">
+        最近会话
+      </div>
+      <div class="flex-1 min-h-0 overflow-y-auto pb-2 scrollbar-thin relative space-y-0.5">
         <div
           v-for="s in sessions"
           :key="s.session_id"
@@ -245,9 +253,9 @@ watch(
           class="group flex items-center justify-between px-3 py-2 text-sm rounded-lg cursor-pointer transition"
           :class="[
             route.params.sessionId === s.session_id
-              ? 'bg-slate-600 text-white'
-              : 'text-slate-300 hover:bg-slate-700/50 hover:text-white',
-            s._isNew ? 'bg-slate-600 text-white' : '',
+              ? 'bg-white/10 text-white'
+              : 'text-slate-300 hover:bg-white/5 hover:text-white',
+            s._isNew ? 'bg-white/10 text-white' : '',
           ]"
         >
           <div class="flex-1 min-w-0">
@@ -272,7 +280,7 @@ watch(
         </div>
         <div
           v-if="loading"
-          class="sticky bottom-0 text-center py-1.5 text-xs text-slate-500 bg-slate-800/90 backdrop-blur-sm"
+          class="sticky bottom-0 text-center py-1.5 text-xs text-slate-500 bg-slate-900/90 backdrop-blur-sm"
         >
           加载中...
         </div>
@@ -280,14 +288,14 @@ watch(
     </div>
 
     <!-- 底部：个人中心与管理入口 -->
-    <div class="p-3 border-t border-slate-700 space-y-1">
+    <div class="p-3 border-t border-white/5 space-y-1.5">
       <router-link
         to="/personal"
-        class="flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition relative"
+        class="flex items-center gap-3 px-3 py-2 text-sm rounded-xl transition relative"
         :class="
           route.path === '/personal'
-            ? 'bg-slate-700 text-white'
-            : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
+            ? 'bg-white/10 text-white'
+            : 'bg-white/[0.03] text-slate-300 hover:bg-white/10 hover:text-white'
         "
       >
         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -299,7 +307,12 @@ watch(
           />
         </svg>
         <span class="truncate">{{ auth.user?.username || '登录' }}</span>
-        <span v-if="auth.isAdmin" class="text-[10px] text-blue-300">管理员</span>
+        <span
+          v-if="auth.isAdmin"
+          class="text-[10px] font-medium text-blue-200 bg-blue-500/20 rounded-full px-1.5 py-0.5"
+        >
+          管理员
+        </span>
         <span
           v-if="pendingCount > 0"
           class="absolute right-3 top-1/2 -translate-y-1/2 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-medium bg-orange-500 text-white rounded-full"
@@ -310,7 +323,7 @@ watch(
       <router-link
         v-if="auth.canAccessOPortal"
         to="/o/dashboard"
-        class="flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition text-slate-400 hover:bg-slate-700/50 hover:text-white"
+        class="flex items-center gap-3 px-3 py-2 text-sm rounded-xl transition text-slate-400 hover:bg-white/5 hover:text-white"
       >
         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
