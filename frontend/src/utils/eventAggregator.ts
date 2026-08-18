@@ -27,6 +27,7 @@ export interface AggregatorSnapshot {
 
 export function createEventAggregator(isRealtime = false): {
   consume(eventType: string, data: Record<string, unknown>): void
+  markSynthesizeFirstToken(elapsedSeconds: number): void
   finalize(): void
   getSnapshot(): AggregatorSnapshot
 } {
@@ -207,13 +208,23 @@ export function createEventAggregator(isRealtime = false): {
           thinkingBlocks[thinkingBlocks.length - 1]
 
         if (block) {
-          block.elapsedSeconds = d.elapsed_seconds as number | undefined
+          if (block.elapsedSeconds == null) {
+            block.elapsedSeconds = d.elapsed_seconds as number | undefined
+          }
           block.status = (d.status as ReasoningStatus) || 'completed'
           block.isCollapsed = true
         }
         break
       }
     }
+  }
+
+  function markSynthesizeFirstToken(elapsedSeconds: number) {
+    const block = thinkingBlocks.findLast(
+      (item) =>
+        item.agentId === 'lead_agent' && item.phase === 'synthesize' && item.elapsedSeconds == null,
+    )
+    if (block) block.elapsedSeconds = Math.max(0, elapsedSeconds)
   }
 
   function finalize() {
@@ -274,5 +285,5 @@ export function createEventAggregator(isRealtime = false): {
     return { agentEvents, thinkingBlocks, delegations }
   }
 
-  return { consume, finalize, getSnapshot }
+  return { consume, markSynthesizeFirstToken, finalize, getSnapshot }
 }

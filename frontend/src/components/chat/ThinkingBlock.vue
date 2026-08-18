@@ -74,11 +74,11 @@ function stopTimer() {
   }
 }
 
-// 执行中启动计时，完成、等待、跳过或失败时停止。
+// 执行中启动计时；收到冻结耗时或完成、等待、跳过、失败时停止。
 watch(
-  isProcessing,
-  (processing) => {
-    if (processing) {
+  [isProcessing, () => props.elapsedSeconds],
+  ([processing, elapsed]) => {
+    if (processing && elapsed == null) {
       startTimer()
     } else {
       stopTimer()

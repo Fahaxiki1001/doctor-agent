@@ -70,6 +70,26 @@ describe('LeadAgent 事件聚合', () => {
     expect(blocks[1].phase).toBe('decompose')
   })
 
+  it('首个最终 token 到达时冻结结果汇总耗时', () => {
+    const aggregator = createEventAggregator(true)
+    const envelope = (data: Record<string, unknown>) => ({
+      source_agent: 'lead_agent',
+      data,
+    })
+
+    aggregator.consume(
+      'agent_thinking',
+      envelope({ content: '正在汇总', iteration: 2, phase: 'synthesize', status: 'running' }),
+    )
+    aggregator.markSynthesizeFirstToken(1.2)
+    aggregator.markSynthesizeFirstToken(9.9)
+
+    const [block] = aggregator.getSnapshot().thinkingBlocks
+    expect(block.phase).toBe('synthesize')
+    expect(block.elapsedSeconds).toBe(1.2)
+    expect(block.status).toBe('running')
+  })
+
   it('兼容无 phase 的历史思考事件', () => {
     const aggregator = createEventAggregator(false)
     aggregator.consume('agent_thinking', {

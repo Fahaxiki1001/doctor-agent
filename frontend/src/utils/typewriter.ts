@@ -22,8 +22,11 @@ export function typeRemainingText(options: TypewriterOptions): TypewriterControl
   let timer: ReturnType<typeof setTimeout> | undefined
   let cancelled = false
 
+  // 流式正文与最终答案常只差尾部空白（后端剥离 followups 标记时做了 rstrip）。
+  // 这种情况下只回退空白，避免把已显示的正文清空重打一遍。
   if (!options.targetText.startsWith(displayedText)) {
-    displayedText = ''
+    const trimmed = displayedText.trimEnd()
+    displayedText = trimmed && options.targetText.startsWith(trimmed) ? trimmed : ''
     options.onUpdate(displayedText)
   }
 

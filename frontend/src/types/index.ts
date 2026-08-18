@@ -111,6 +111,7 @@ export interface AgentThinkingDoneData {
 export interface AgentContentDeltaData {
   data?: {
     token: string
+    is_final?: boolean
   }
 }
 

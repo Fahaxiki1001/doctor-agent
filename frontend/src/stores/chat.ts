@@ -65,6 +65,7 @@ export const useChatStore = defineStore('chat', () => {
     clarifyWaitMs = 0
     clarifyWaitBeganAt = null
     let firstTokenAt: number | null = null
+    let synthesizeStartedAt: number | null = null
 
     // 实时流使用 eventAggregator 收集事件
     const aggregator = createEventAggregator(true)
@@ -113,7 +114,12 @@ export const useChatStore = defineStore('chat', () => {
             }
           },
           onAgentThinking(data) {
-            aggregator.consume('agent_thinking', data as Record<string, unknown>)
+            const event = data as Record<string, unknown>
+            const detail = (event.data as Record<string, unknown>) || event
+            if (detail.phase === 'synthesize' && detail.status === 'running') {
+              synthesizeStartedAt = performance.now()
+            }
+            aggregator.consume('agent_thinking', event)
             const snapshot = aggregator.getSnapshot()
             const msg = messages.value.find((m) => m.id === assistantMsg.id)
             if (msg) {
@@ -141,8 +147,17 @@ export const useChatStore = defineStore('chat', () => {
             const msg = messages.value.find((m) => m.id === assistantMsg.id)
             if (msg) {
               const token = data.data?.token || ''
+              const isFinal = data.data?.is_final === true
               if (token && firstTokenAt === null) {
                 firstTokenAt = performance.now()
+              }
+              if (token && isFinal && synthesizeStartedAt !== null) {
+                aggregator.markSynthesizeFirstToken(
+                  (performance.now() - synthesizeStartedAt) / 1000,
+                )
+                const snapshot = aggregator.getSnapshot()
+                msg.thinkingBlocks = [...snapshot.thinkingBlocks]
+                synthesizeStartedAt = null
               }
               msg.content = (msg.content || '') + token
             }
