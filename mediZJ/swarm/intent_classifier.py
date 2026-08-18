@@ -14,6 +14,21 @@ _MEDICAL = "medical"
 _OTHERS = "others"
 _VALID_INTENTS = frozenset({_MEDICAL, _OTHERS})
 
+# 规则快路：命中即判 medical，省掉一次 LLM 往返。
+# 只对 medical 方向做快路——把医疗问题误判成闲聊会直接送进 chat_reply，
+# 是唯一不可接受的错误方向，所以 others 一律回落 LLM。
+_MEDICAL_KEYWORDS = frozenset({
+    "疼", "痛", "发烧", "发热", "咳嗽", "咳痰", "头晕", "恶心", "呕吐", "腹泻",
+    "血压", "血糖", "血脂", "心率", "过敏", "皮疹", "失眠", "水肿",
+    "用药", "服药", "吃药", "剂量", "副作用", "忌口", "疗程",
+    "症状", "病史", "检查", "化验", "复查", "就医", "挂号", "门诊", "手术",
+    "医生", "医院", "科室", "确诊", "治疗", "康复",
+})
+
+# 规则结果的置信度：刻意低于 clarify 短路门限（0.95），
+# 避免用置信度数值隐式控制"是否跳过澄清"。
+_RULE_CONFIDENCE = 0.9
+
 
 @dataclass
 class IntentResult:
@@ -21,7 +36,7 @@ class IntentResult:
 
     intent: str            # medical | others
     confidence: float      # 0.0 ~ 1.0
-    source: str            # "llm" | "fallback"
+    source: str            # "rule" | "llm" | "fallback"
     reason: str = ""
 
     @property
@@ -30,8 +45,28 @@ class IntentResult:
         return self.intent == _OTHERS
 
 
+def try_rule_classify(question: str) -> IntentResult | None:
+    """医疗关键词规则快路：命中即判 medical，不调用 LLM。
+
+    只做 medical 方向的判定。判 others 的错误代价（医疗问题被送进闲聊直答）
+    远高于多调一次 LLM，因此未命中一律返回 None 回落 LLM。
+    """
+    text = (question or "").strip()
+    if not text:
+        return None
+    hit = next((w for w in _MEDICAL_KEYWORDS if w in text), None)
+    if hit is None:
+        return None
+    return IntentResult(
+        intent=_MEDICAL,
+        confidence=_RULE_CONFIDENCE,
+        source="rule",
+        reason=f"命中医疗关键词: {hit}",
+    )
+
+
 class IntentClassifier:
-    """基于 LLM 的意图识别器（纯 LLM 判断，无规则短路层）。
+    """意图识别器：医疗关键词规则快路 + LLM 兜底判断。
 
     医学安全优先：判断失败或不确定时一律降级为 medical（不跳过检索），
     宁可多检索一次 Mem0，也不丢医疗问题。
@@ -57,8 +92,13 @@ class IntentClassifier:
 
         Returns:
             IntentResult：intent 为 medical 或 others。
+            命中医疗关键词时走规则快路（source="rule"），不调用 LLM。
             任何异常（超时、JSON 解析失败、网络错误）均降级为 medical。
         """
+        rule_result = try_rule_classify(question)
+        if rule_result is not None:
+            return rule_result
+
         try:
             prompt = PromptLoader.render("memory/intent_gate.j2", question=question)
             raw = await asyncio.wait_for(

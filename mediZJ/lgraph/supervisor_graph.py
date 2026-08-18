@@ -24,6 +24,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from mediZJ.lgraph.supervisor_state import SupervisorState
 from mediZJ.lgraph.agent_subgraph import build_agent_subgraph
 from mediZJ.lgraph.tool_registry import ToolRegistry
+from mediZJ.lgraph.decompose_rules import try_rule_decompose
 from mediZJ.swarm.events import Event, EventType
 from mediZJ.swarm.intent_classifier import IntentClassifier
 from mediZJ.swarm.lead_agent import _QUESTION_TOOL_SCHEMA
@@ -250,15 +251,19 @@ def build_supervisor_graph(
                 ),
             }
 
-        # 追问轮短路：高置信度医疗意图 + 已有对话历史时，不再花一次 LLM 判断是否追问
+        # 追问轮短路：医疗意图 + 已有对话历史时，不再花一次 LLM 判断是否追问
         # （历史里已有上一轮的症状描述与结论，此处判定几乎恒为"无需追问"）
+        # 规则快路（source="rule"）显式参与短路，而不是靠置信度数值间接控制。
         if (
             current_round == 0
             and state.get("intent") == "medical"
-            and state.get("intent_confidence", 0.0) >= _CLARIFY_SKIP_CONFIDENCE
+            and (
+                state.get("intent_source") == "rule"
+                or state.get("intent_confidence", 0.0) >= _CLARIFY_SKIP_CONFIDENCE
+            )
             and state.get("recent_history")
         ):
-            logger.info("[SupervisorGraph] clarify 短路：追问轮且意图高置信，跳过 LLM 判定")
+            logger.info("[SupervisorGraph] clarify 短路：追问轮且意图明确，跳过 LLM 判定")
             think_start = time.monotonic()
             _emit_clarify_thinking("已有上一轮对话信息，无需追问，直接进入分析。", "skipped")
             _emit_clarify_done("skipped")
@@ -451,6 +456,30 @@ def build_supervisor_graph(
 
     async def _assess_decompose(state: SupervisorState) -> dict:
         """节点: 任务分解（替代 coordinator._do_assess_decompose）"""
+        # 规则短路：追问轮 + 单点诉求恒为「1 个 consultation 子任务」，无需 LLM
+        rule_subtasks = try_rule_decompose(state)
+        if rule_subtasks is not None:
+            logger.info("[SupervisorGraph] 任务分解规则短路: 1 个 consultation 子任务")
+            if event_callback:
+                event_callback(Event(
+                    type=EventType.AGENT_THINKING,
+                    source_agent="lead_agent",
+                    data={
+                        "content": "单点追问，直接由健康咨询 Agent 作答。",
+                        "iteration": 1,
+                        "phase": "decompose",
+                        "title": "任务分解",
+                        "status": "skipped",
+                    },
+                ))
+                event_callback(Event(
+                    type=EventType.AGENT_THINKING_DONE,
+                    source_agent="lead_agent",
+                    data={"iteration": 1, "elapsed_seconds": 0.0,
+                          "phase": "decompose", "status": "skipped"},
+                ))
+            return {"subtasks": rule_subtasks}
+
         # 注入 LeadAgent thinking 回调
         if event_callback:
             def _on_think(content, iteration):
@@ -566,6 +595,7 @@ def build_supervisor_graph(
                 "subtask_description": task.get("description", ""),
                 "question": state["question"],  # 含图片分析文本的完整问题
                 "collected_info": state.get("collected_info", ""),
+                "recent_history": state.get("recent_history", []),
                 "max_iterations": worker.config.get('max_iterations', 10),
                 "max_tool_calls": 2,
             })
@@ -764,6 +794,7 @@ def build_supervisor_graph(
                     "subtask_description": subtask.get("description", ""),
                     "question": state["question"],  # 含图片分析文本的完整问题
                     "collected_info": state.get("collected_info", ""),
+                    "recent_history": state.get("recent_history", []),
                     "max_iterations": worker.config.get('max_iterations', 10),
                     "max_tool_calls": 2,
                 }),
@@ -1067,6 +1098,7 @@ def build_supervisor_graph(
                     "session_id": session_id,
                     "question": state["question"],
                     "collected_info": state.get("collected_info", ""),
+                    "recent_history": state.get("recent_history", []),
                 }
             ))
 

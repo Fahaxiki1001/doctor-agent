@@ -394,10 +394,21 @@ class SwarmCoordinator:
 
     def compose_result(self, question: str, result_state: Dict[str, Any],
                        start_time: datetime, session_id: str,
-                       trace_id: Optional[str] = None) -> Dict[str, Any]:
-        """将 SupervisorState 结果组装为对外 result（含 LTM fire-and-forget）"""
+                       trace_id: Optional[str] = None,
+                       excluded_wait_seconds: float = 0.0) -> Dict[str, Any]:
+        """将 SupervisorState 结果组装为对外 result（含 LTM fire-and-forget）
+
+        Args:
+            excluded_wait_seconds: 需从 total_time 扣除的等待时长
+                （澄清问卷期间的用户填写时间，不属于系统耗时）
+        """
         end_time = datetime.now()
         trace_id = trace_id or str(uuid.uuid4())
+
+        raw_total = result_state.get(
+            "total_time", (end_time - start_time).total_seconds()
+        )
+        total_time = max(0.0, raw_total - excluded_wait_seconds)
 
         result = {
             "answer": result_state.get("final_answer", ""),
@@ -407,7 +418,7 @@ class SwarmCoordinator:
             "swarm_enabled": result_state.get("swarm_enabled", False),
             "agents_involved": result_state.get("agents_involved", []),
             "subtasks_completed": len(result_state.get("swarm_contributions", {})),
-            "total_time": result_state.get("total_time", (end_time - start_time).total_seconds()),
+            "total_time": total_time,
             "swarm_metadata": result_state.get("swarm_metadata", {}),
             "timeout_occurred": result_state.get("timeout_occurred", False),
             "usage": result_state.get("usage", {}),

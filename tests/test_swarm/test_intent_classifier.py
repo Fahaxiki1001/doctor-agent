@@ -9,7 +9,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from mediZJ.swarm.intent_classifier import IntentClassifier, IntentResult
+from mediZJ.swarm.intent_classifier import (
+    IntentClassifier,
+    IntentResult,
+    try_rule_classify,
+)
 from tests.helpers import make_mock_openai_response
 
 
@@ -18,6 +22,52 @@ def _set_llm_response(mock_llm_client, payload: dict) -> None:
     mock_llm_client.client.chat.completions.create = AsyncMock(
         return_value=make_mock_openai_response(content=json.dumps(payload, ensure_ascii=False))
     )
+
+
+class TestRuleFastPath:
+    """规则快路：命中医疗关键词不调 LLM；只判 medical，不判 others。"""
+
+    @pytest.mark.parametrize("question", [
+        "我头痛怎么办", "血压有点高", "这个药的剂量是多少", "需要复查吗", "要不要就医",
+    ])
+    def test_medical_keywords_hit(self, question):
+        result = try_rule_classify(question)
+        assert result is not None
+        assert result.intent == "medical"
+        assert result.source == "rule"
+
+    @pytest.mark.parametrize("question", ["你好", "今天天气不错", "", "   "])
+    def test_non_medical_falls_back_to_llm(self, question):
+        assert try_rule_classify(question) is None
+
+    def test_rule_confidence_below_clarify_threshold(self):
+        # 置信度不得填 1.0：它是 clarify 短路门限的输入，
+        # 填满会让规则命中隐式跳过澄清判定。
+        result = try_rule_classify("我头痛")
+        assert result.confidence < 0.95
+
+    @pytest.mark.asyncio
+    async def test_classify_skips_llm_on_rule_hit(self, mock_llm_client):
+        create_mock = AsyncMock()
+        mock_llm_client.client.chat.completions.create = create_mock
+        result = await IntentClassifier(llm_client=mock_llm_client).classify("我肚子疼")
+        create_mock.assert_not_awaited()
+        assert result.source == "rule"
+        assert result.skip_long_term is False
+
+    @pytest.mark.asyncio
+    async def test_classify_calls_llm_when_rule_misses(self, mock_llm_client):
+        _set_llm_response(mock_llm_client, {"intent": "others", "confidence": 0.95})
+        result = await IntentClassifier(llm_client=mock_llm_client).classify("今天几号")
+        assert result.source == "llm"
+        assert result.intent == "others"
+
+    def test_greeting_with_medical_word_judged_medical(self):
+        # 含医疗词的寒暄句被判 medical 属可接受偏保守：
+        # 代价是多走一次医疗链路，而不是丢掉医疗诉求。
+        result = try_rule_classify("你好呀，顺便问下我头痛")
+        assert result is not None
+        assert result.intent == "medical"
 
 
 class TestIntentClassifierLLM:
@@ -34,10 +84,12 @@ class TestIntentClassifierLLM:
 
     @pytest.mark.asyncio
     async def test_medical_does_not_skip(self, mock_llm_client):
+        # 用不含医疗关键词的表述，确保走到 LLM 分支
         _set_llm_response(mock_llm_client, {"intent": "medical", "confidence": 0.98, "reason": "症状咨询"})
         classifier = IntentClassifier(llm_client=mock_llm_client)
-        result = await classifier.classify("我头痛怎么办")
+        result = await classifier.classify("最近总是没精神")
         assert result.intent == "medical"
+        assert result.source == "llm"
         assert result.skip_long_term is False
 
     @pytest.mark.asyncio
@@ -59,12 +111,12 @@ class TestIntentClassifierLLM:
     async def test_prompt_rendered_with_question(self, mock_llm_client):
         create_mock = AsyncMock(return_value=make_mock_openai_response(content=json.dumps({"intent": "medical"})))
         mock_llm_client.client.chat.completions.create = create_mock
-        await IntentClassifier(llm_client=mock_llm_client).classify("我肚子疼")
+        await IntentClassifier(llm_client=mock_llm_client).classify("最近总是没精神")
         call_args = create_mock.call_args
         assert call_args.kwargs["temperature"] == 0
         assert call_args.kwargs["response_format"] == {"type": "json_object"}
         user_prompt = call_args.kwargs["messages"][1]["content"]
-        assert "我肚子疼" in user_prompt
+        assert "最近总是没精神" in user_prompt
 
 
 class TestIntentClassifierFallback:

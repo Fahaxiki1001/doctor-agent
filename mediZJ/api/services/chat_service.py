@@ -313,6 +313,8 @@ async def _chat_stream_impl(
     import time as _time
 
     stream_started_at = _time.monotonic()
+    # 澄清问卷挂起期间是用户填写时间，不属于系统延迟，累计后从指标中扣除
+    clarify_wait_seconds = 0.0
     first_token_time_ms: Optional[float] = None
     _marker_hold = ""  # followups 标记块跨 token 暂存区
     bridge = EventBridge()
@@ -477,6 +479,13 @@ async def _chat_stream_impl(
     # 收集 _yield_event 闭包捕获的待发送事件列表
     _pending_yields: List[tuple] = []
 
+    def _elapsed_ms() -> float:
+        """扣除问卷等待后的净耗时（毫秒）"""
+        return max(
+            0.0,
+            _time.monotonic() - stream_started_at - clarify_wait_seconds,
+        ) * 1000
+
     def _yield_event(evt_name: str, evt_data: Dict[str, Any]):
         """将事件加入待发送列表（在 _drain_one 中统一 yield）"""
         _pending_yields.append((evt_name, evt_data))
@@ -495,7 +504,7 @@ async def _chat_stream_impl(
                 if not token:
                     return
                 if first_token_time_ms is None:
-                    first_token_time_ms = (_time.monotonic() - stream_started_at) * 1000
+                    first_token_time_ms = _elapsed_ms()
                 evt_dict = event.to_dict()
                 evt_dict["data"]["token"] = token
                 _yield_event(mapped_type, evt_dict)
@@ -608,11 +617,14 @@ async def _chat_stream_impl(
 
         else:  # phase == "wait_answer"
             logger.info(f"Clarify interrupt pending for session={session_id}, awaiting answer")
+            _wait_began_at = _time.monotonic()
             answer_task = asyncio.ensure_future(answer_queue.get())
             done, _ = await asyncio.wait(
                 [answer_task, disconnect_task],
                 return_when=asyncio.FIRST_COMPLETED,
             )
+            # 用户填写问卷的时长不计入延迟指标（多轮问卷逐轮累加）
+            clarify_wait_seconds += _time.monotonic() - _wait_began_at
             if disconnect_task in done:
                 answer_task.cancel()
                 disconnected = True
@@ -715,9 +727,12 @@ async def _chat_stream_impl(
         return
 
     # 组装对外 result（含 LTM fire-and-forget，与 coordinator.process() 一致）
-    result = coordinator.compose_result(question, result, start_time, session_id, trace_id=trace_id)
+    result = coordinator.compose_result(
+        question, result, start_time, session_id, trace_id=trace_id,
+        excluded_wait_seconds=clarify_wait_seconds,
+    )
     if first_token_time_ms is None and result.get("answer"):
-        first_token_time_ms = (_time.monotonic() - stream_started_at) * 1000
+        first_token_time_ms = _elapsed_ms()
     result["first_token_time_ms"] = first_token_time_ms
     await _finish_trace(result)
 

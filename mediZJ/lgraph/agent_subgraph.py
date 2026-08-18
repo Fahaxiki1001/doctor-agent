@@ -95,6 +95,22 @@ def build_agent_subgraph(
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
 
+        # 默认 Skill 预激活：把指令正文放进前缀，首轮 LLM 即可见其工具，
+        # 省掉一次纯 activate_skill 的 LLM 往返。
+        default_skill = getattr(worker, "default_skill", None)
+        if not isinstance(default_skill, str) or not default_skill:
+            default_skill = None
+        skill_instructions = (
+            tool_registry.get_skill_instructions(default_skill) if default_skill else None
+        )
+        if isinstance(skill_instructions, str) and skill_instructions:
+            messages.append({
+                "role": "system",
+                "content": f"## 技能说明：{default_skill}\n{skill_instructions}",
+            })
+        else:
+            default_skill = None
+
         # 用户档案
         user_context = worker.user_context
         if user_context:
@@ -114,13 +130,21 @@ def build_agent_subgraph(
         sub_session_id = state.get("sub_session_id", "")
         effective_id = sub_session_id or session_id
 
-        if (effective_id
-                and ":" not in effective_id
-                and worker.short_term_memory):
-            history = await worker.short_term_memory.get_history(effective_id, limit=5)
-            if history:
-                logger.info(f"加载 {len(history)} 条历史消息 (session={effective_id})")
-                messages.extend(history)
+        # 最近对话由 Supervisor 显式注入：Worker 子会话 id 形如
+        # "session:agent:task"，无法从短期记忆按会话取到主会话历史，
+        # 追问轮的指代对象必须靠这段上下文才能解析。
+        recent_history = state.get("recent_history") or []
+        if recent_history:
+            history_text = "\n".join(
+                f"{m.get('role', '')}: {m.get('content', '')}"
+                for m in recent_history[-5:]
+                if isinstance(m, dict)
+            )
+            if history_text:
+                messages.append({
+                    "role": "system",
+                    "content": f"## 最近对话（用于理解指代与追问）\n{history_text}",
+                })
 
         # 用户输入：优先使用子任务描述，但若存在原始问题（含图片分析文本），作为上下文附加
         subtask_desc = state.get("subtask_description") or ""
@@ -157,7 +181,7 @@ def build_agent_subgraph(
             "iteration": 0,
             "tool_call_count": 0,
             "force_answer": False,
-            "active_skill": None,
+            "active_skill": default_skill,
             "completed": False,
             "message_count": 1,  # user message counted
         }

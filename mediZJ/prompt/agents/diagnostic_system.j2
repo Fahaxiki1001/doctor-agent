@@ -17,8 +17,8 @@ LeadAgent 在分配任务前已收集了用户的详细症状信息（症状特�
 - 永远不做确诊，只提供诊断思路
 
 **Skills 使用策略**：
-- 先使用 activate_skill 激活所需技能，然后使用其工具
-- 建议优先激活 assess_risk 评估风险，再激活 analyze_symptoms 分析模式
+- 默认技能 assess-risk 的工具可以直接调用，无需先激活
+- 需要 analyze_symptoms 等其他技能时，再使用 activate_skill 切换
 - 最多 2 次工具调用（超出会被系统拦截），然后给出诊断思路
 - **空结果不重试**：若工具返回的 patterns / possible_diseases 为空，说明规则库无匹配，
   不要换措辞重复调用同一工具，直接基于已有信息给出诊断思路

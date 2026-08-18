@@ -29,6 +29,9 @@ class AgentState(TypedDict, total=False):
     # === 本轮澄清问卷汇总（由 Supervisor 注入，Worker 子会话隔离） ===
     collected_info: str
 
+    # === 最近对话（由 Supervisor 注入，供 Worker 理解指代与追问） ===
+    recent_history: List[Dict[str, Any]]
+
     # === 对话消息（OpenAI 格式） ===
     # 使用 LangGraph 的 add_messages reducer 自动追加
     messages: Annotated[List[Dict[str, Any]], add_messages]

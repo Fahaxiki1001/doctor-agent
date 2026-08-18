@@ -70,13 +70,16 @@ class Worker:
         agent_id: str,
         llm_client: LLMClient,
         system_prompt_template: str,
-        user_input_template: str,
+        user_input_template: Optional[str],
         config: Optional[Dict[str, Any]] = None,
+        default_skill: Optional[str] = None,
     ):
         self.agent_id = agent_id
         self.llm_client = llm_client
         self._system_prompt_template = system_prompt_template
         self._user_input_template = user_input_template
+        # 首轮即可见的默认 Skill：省掉一次纯 activate_skill 的 LLM 往返
+        self.default_skill = default_skill
         self.config = {
             "temperature": 0.7,
             "max_iterations": 5,
@@ -114,10 +117,14 @@ class Worker:
         base = PromptLoader.load(self._system_prompt_template)
         catalog = self._format_skills_catalog()
         if catalog:
-            base += (
-                f"\n\n---\n## 可用 Skills\n{catalog}\n\n"
-                f"使用 activate_skill(name=\"xxx\") 激活技能后方可使用其工具。"
-            )
+            base += f"\n\n---\n## 可用 Skills\n{catalog}\n\n"
+            if self.default_skill:
+                base += (
+                    f"当前已默认激活 **{self.default_skill}**，其工具可直接调用；"
+                    f"需要其他技能时再使用 activate_skill(name=\"xxx\")。"
+                )
+            else:
+                base += "使用 activate_skill(name=\"xxx\") 激活技能后方可使用其工具。"
         return base
 
     def _format_skills_catalog(self) -> str:
@@ -273,18 +280,21 @@ def create_worker(
     config: Optional[Dict[str, Any]] = None,
 ) -> Worker:
     """按 agent_id 创建对应 Worker（consultation / diagnostic / research）"""
-    spec = {
+    spec: Dict[str, Dict[str, Any]] = {
         "consultation_agent": {
             "system_prompt_template": "agents/consultation_system.j2",
             "user_input_template": "agents/consultation_user_input.j2",
+            "default_skill": "search-knowledge",
         },
         "diagnostic_agent": {
             "system_prompt_template": "agents/diagnostic_system.j2",
             "user_input_template": None,
+            "default_skill": "assess-risk",
         },
         "research_agent": {
             "system_prompt_template": "agents/research_system.j2",
             "user_input_template": None,
+            "default_skill": "clinical-guideline",
         },
     }
     if agent_id not in spec:
@@ -300,4 +310,5 @@ def create_worker(
         system_prompt_template=spec[agent_id]["system_prompt_template"],
         user_input_template=spec[agent_id]["user_input_template"],
         config={**default_config, **(config or {})},
+        default_skill=spec[agent_id]["default_skill"],
     )

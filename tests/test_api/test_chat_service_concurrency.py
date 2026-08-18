@@ -159,7 +159,7 @@ async def test_stream_timeout_returns_friendly_error(monkeypatch):
                     "suggestions": []}
 
         def compose_result(self, question, result_state, start_time, session_id,
-                           trace_id=None):
+                           trace_id=None, excluded_wait_seconds=0.0):
             result_state["_ltm_save_task"] = None
             return result_state
 
@@ -224,7 +224,7 @@ async def test_multi_round_questionnaire_resume(monkeypatch):
             }
 
         def compose_result(self, question, result_state, start_time, session_id,
-                           trace_id=None):
+                           trace_id=None, excluded_wait_seconds=0.0):
             result_state["_ltm_save_task"] = None
             return result_state
 
@@ -310,8 +310,9 @@ async def test_stream_only_forwards_final_content_delta(monkeypatch):
             start_time,
             session_id,
             trace_id=None,
+            excluded_wait_seconds=0.0,
         ):
-            del question, start_time, session_id, trace_id
+            del question, start_time, session_id, trace_id, excluded_wait_seconds
             return result_state
 
     monkeypatch.setattr(cs, "SwarmCoordinator", StreamingCoordinator)

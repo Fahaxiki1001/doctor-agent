@@ -463,7 +463,10 @@ class TestClarifyShortCircuit:
         # clarify 的 LLM 判定被短路
         assert coordinator.lead_agent.llm_client.chat_with_tools.await_count == 0
         assert coordinator.lead_agent.llm_client.chat_with_tools_stream.await_count == 0
-        coordinator.lead_agent.assess_and_decompose.assert_awaited_once()
+        # 追问轮 + 单点诉求：分解也走规则短路，不调 LeadAgent
+        coordinator.lead_agent.assess_and_decompose.assert_not_awaited()
+        assert result["subtasks"][0]["id"] == "rule"
+        assert result["subtasks"][0]["assigned_agent"] == "consultation_agent"
 
     @pytest.mark.asyncio
     async def test_first_turn_still_calls_llm(self):

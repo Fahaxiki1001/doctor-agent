@@ -18,6 +18,16 @@ export const useChatStore = defineStore('chat', () => {
   const isStreaming = ref(false)
   const error = ref<string | null>(null)
   let typewriter: TypewriterController | null = null
+  // 问卷等待（用户填写时间）不计入延迟指标：问卷送达时开窗，提交/取消时结算
+  let clarifyWaitMs = 0
+  let clarifyWaitBeganAt: number | null = null
+
+  function settleClarifyWait() {
+    if (clarifyWaitBeganAt !== null) {
+      clarifyWaitMs += performance.now() - clarifyWaitBeganAt
+      clarifyWaitBeganAt = null
+    }
+  }
 
   const { connect, disconnect } = useSSE()
 
@@ -52,6 +62,8 @@ export const useChatStore = defineStore('chat', () => {
     let isDone = false
     isStreaming.value = true
     const requestStartedAt = performance.now()
+    clarifyWaitMs = 0
+    clarifyWaitBeganAt = null
     let firstTokenAt: number | null = null
 
     // 实时流使用 eventAggregator 收集事件
@@ -142,6 +154,8 @@ export const useChatStore = defineStore('chat', () => {
               const d = data.data || data
               // 同 id 问卷已渲染则不覆盖（防 resume 重放重复事件）；新 id 自然覆盖旧问卷
               if (msg.questionnaire?.questionnaire_id === (d.questionnaire_id as string)) return
+              // 开窗：此后到提交/取消之间是用户填写时间
+              clarifyWaitBeganAt = performance.now()
               msg.questionnaire = {
                 questionnaire_id: d.questionnaire_id as string,
                 questions: (d.questionnaire_data?.questions || []) as never[],
@@ -152,6 +166,7 @@ export const useChatStore = defineStore('chat', () => {
           onAgentQuestionnaireCancelled(data) {
             const d = ((data as Record<string, unknown>).data || data) as Record<string, unknown>
             const qid = d.questionnaire_id as string
+            settleClarifyWait()
             if (qid) {
               const msg = messages.value.find((m) => m.questionnaire?.questionnaire_id === qid)
               if (msg) msg.questionnaire = undefined
@@ -171,7 +186,9 @@ export const useChatStore = defineStore('chat', () => {
                 firstTokenAt = performance.now()
               }
               const clientTtft =
-                firstTokenAt === null ? undefined : (firstTokenAt - requestStartedAt) / 1000
+                firstTokenAt === null
+                  ? undefined
+                  : Math.max(0, firstTokenAt - requestStartedAt - clarifyWaitMs) / 1000
               // 优先使用后端权威的首 token 用时（秒），客户端测量仅作兜底
               const timeToFirstToken =
                 data.time_to_first_token != null ? data.time_to_first_token : clientTtft
@@ -394,6 +411,8 @@ export const useChatStore = defineStore('chat', () => {
 
   async function submitAnswers(questionnaireId: string, answers: Record<string, unknown>) {
     const msg = messages.value.find((m) => m.questionnaire?.questionnaire_id === questionnaireId)
+    // 结算填写窗口：提交动作发出即视为用户输入结束
+    settleClarifyWait()
     try {
       const resp = await fetch('/api/chat/answer', {
         method: 'POST',
@@ -410,6 +429,8 @@ export const useChatStore = defineStore('chat', () => {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
       // 失败时保留问卷卡片并置错误态，供用户重试（避免后端一直等答案、SSE 挂起导致卡死）
+      // 重试期间仍是用户时间，重新开窗
+      clarifyWaitBeganAt = performance.now()
       if (msg) {
         msg.questionnaireError = `提交答案失败：${message}，请重试`
       }
