@@ -18,23 +18,6 @@ const navItems = [
     label: '智能问答',
     icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z',
   },
-  {
-    path: '/knowledge',
-    label: '知识库',
-    icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
-  },
-  {
-    path: '/dashboard',
-    label: '仪表盘',
-    icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
-  },
-  { path: '/traces', label: '轨迹', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
-  {
-    path: '/evolution',
-    label: '自进化',
-    adminOnly: true,
-    icon: 'M4 4v6h6M20 20v-6h-6M5 19a9 9 0 0014-7M19 5A9 9 0 005 12',
-  },
 ]
 
 const sessions = ref<SessionItem[]>([])
@@ -235,7 +218,6 @@ watch(
     <nav class="px-3 space-y-1">
       <router-link
         v-for="item in navItems"
-        v-show="!item.adminOnly || auth.isAdmin"
         :key="item.path"
         :to="item.path"
         class="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition"
@@ -297,8 +279,8 @@ watch(
       </div>
     </div>
 
-    <!-- 底部：个人中心 -->
-    <div class="p-3 border-t border-slate-700">
+    <!-- 底部：个人中心与管理入口 -->
+    <div class="p-3 border-t border-slate-700 space-y-1">
       <router-link
         to="/personal"
         class="flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition relative"
@@ -324,6 +306,21 @@ watch(
         >
           {{ pendingCount }}
         </span>
+      </router-link>
+      <router-link
+        v-if="auth.canAccessOPortal"
+        to="/o/dashboard"
+        class="flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition text-slate-400 hover:bg-slate-700/50 hover:text-white"
+      >
+        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.5"
+            d="M10 6H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5M12 3v8m0 0l3-3m-3 3L9 8"
+          />
+        </svg>
+        <span class="truncate">管理后台</span>
       </router-link>
     </div>
 

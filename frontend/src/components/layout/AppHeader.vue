@@ -8,7 +8,8 @@ const chatStore = useChatStore()
 
 const pageTitles: Record<string, string> = {
   Chat: '智能问答',
-  Knowledge: '知识库',
+  OChat: '调试对话',
+  Knowledge: '知识库运营',
   Dashboard: '仪表盘',
   Traces: '轨迹',
   TraceDetail: '轨迹详情',
@@ -22,6 +23,8 @@ const title = computed(() => {
   }
   return pageTitles[name] || 'MediZJ'
 })
+
+const portalLabel = computed(() => (route.meta.portal === 'o' ? '运营端' : '用户端'))
 </script>
 
 <template>
@@ -29,5 +32,6 @@ const title = computed(() => {
     class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0"
   >
     <h1 class="text-lg font-semibold text-slate-800">{{ title }}</h1>
+    <span class="text-xs text-slate-400">{{ portalLabel }}</span>
   </header>
 </template>

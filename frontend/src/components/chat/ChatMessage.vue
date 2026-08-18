@@ -2,6 +2,7 @@
 import { computed, ref, watch, nextTick } from 'vue'
 import { useMarkdown } from '../../composables/useMarkdown'
 import { useChatStore } from '../../stores/chat'
+import { usePortal } from '../../composables/usePortal'
 import type { ChatMessage, ThinkingBlock } from '../../types'
 import ThinkingBlockItem from './ThinkingBlock.vue'
 import QuestionnaireCard from './QuestionnaireCard.vue'
@@ -18,6 +19,7 @@ defineEmits<{
 }>()
 
 const chatStore = useChatStore()
+const { showInternalDetails } = usePortal()
 const { render } = useMarkdown()
 
 const renderedContent = computed(() => {
@@ -118,9 +120,10 @@ const agentNameMap: Record<string, string> = {
 }
 
 // 拆分为 LeadAgent 和 WorkerAgent 的 thinking blocks
-const leadBlocks = computed(() =>
-  (props.message.thinkingBlocks || []).filter((b) => b.agentId === 'lead_agent'),
-)
+const leadBlocks = computed(() => {
+  if (!showInternalDetails.value) return []
+  return (props.message.thinkingBlocks || []).filter((b) => b.agentId === 'lead_agent')
+})
 
 const leadIntentBlocks = computed(() => leadBlocks.value.filter((b) => b.phase === 'intent'))
 
@@ -134,11 +137,12 @@ const leadSynthesizeBlocks = computed(() =>
   leadBlocks.value.filter((b) => b.phase === 'synthesize' || (!b.phase && b.iteration === 2)),
 )
 
-const workerBlocks = computed(() =>
-  (props.message.thinkingBlocks || []).filter(
+const workerBlocks = computed(() => {
+  if (!showInternalDetails.value) return []
+  return (props.message.thinkingBlocks || []).filter(
     (b) => b.agentId !== 'lead_agent' && b.agentId !== 'swarm_coordinator',
-  ),
-)
+  )
+})
 
 // WorkerAgent 分组（按 agentId）
 const workerGroups = computed(() => {
@@ -635,7 +639,7 @@ watch(
 
             <!-- 元信息 -->
             <div
-              v-if="message.metadata"
+              v-if="message.metadata && showInternalDetails"
               class="mt-2 flex items-center gap-3 text-xs text-slate-400"
             >
               <span v-if="message.metadata.timeToFirstToken != null">

@@ -512,7 +512,7 @@ onMounted(load)
               </RouterLink>
               <RouterLink
                 v-if="item.trace_id"
-                :to="`/trace/${item.trace_id}`"
+                :to="`/o/trace/${item.trace_id}`"
                 class="font-medium text-blue-600 hover:text-blue-700"
               >
                 查看调用链
@@ -568,7 +568,7 @@ onMounted(load)
               </RouterLink>
               <RouterLink
                 v-if="item.trace_id"
-                :to="`/trace/${item.trace_id}`"
+                :to="`/o/trace/${item.trace_id}`"
                 class="font-medium text-blue-600 hover:text-blue-700"
               >
                 查看调用链

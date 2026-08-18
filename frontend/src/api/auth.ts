@@ -1,9 +1,12 @@
 import api from './client'
 
+export type UserRole = 'user' | 'admin'
+export type Portal = 'c' | 'o'
+
 export interface AuthUser {
   user_id: string
   username: string
-  role: 'user' | 'admin'
+  role: UserRole
 }
 
 export async function login(username: string): Promise<AuthUser> {

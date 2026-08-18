@@ -16,9 +16,9 @@ api.interceptors.response.use(
     const isAuthProbe = String(error?.config?.url || '').endsWith('/auth/me')
     if (error?.response?.status === 401 && !isAuthProbe) {
       useAuthStore(pinia).clear()
-      if (router.currentRoute.value.name !== 'Personal') {
+      if (router.currentRoute.value.name !== 'Login') {
         await router.push({
-          name: 'Personal',
+          name: 'Login',
           query: { redirect: router.currentRoute.value.fullPath },
         })
       }

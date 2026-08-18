@@ -5,8 +5,14 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
+      path: '/login',
+      name: 'Login',
+      component: () => import('../views/LoginView.vue'),
+    },
+    {
       path: '/',
-      component: () => import('../components/layout/AppLayout.vue'),
+      component: () => import('../components/layout/CLayout.vue'),
+      meta: { portal: 'c', requiresAuth: true },
       children: [
         { path: '', redirect: '/chat' },
         { path: 'chat', name: 'Chat', component: () => import('../views/ChatView.vue') },
@@ -16,14 +22,27 @@ const router = createRouter({
           component: () => import('../views/ChatView.vue'),
         },
         {
-          path: 'knowledge',
-          name: 'Knowledge',
-          component: () => import('../views/KnowledgeView.vue'),
+          path: 'personal',
+          name: 'Personal',
+          component: () => import('../views/PersonalView.vue'),
         },
+      ],
+    },
+    {
+      path: '/o',
+      component: () => import('../components/layout/OLayout.vue'),
+      meta: { portal: 'o', requiresAuth: true, requiresAdmin: true },
+      children: [
+        { path: '', redirect: '/o/dashboard' },
         {
           path: 'dashboard',
           name: 'Dashboard',
           component: () => import('../views/DashboardView.vue'),
+        },
+        {
+          path: 'knowledge',
+          name: 'Knowledge',
+          component: () => import('../views/KnowledgeView.vue'),
         },
         { path: 'traces', name: 'Traces', component: () => import('../views/TraceView.vue') },
         {
@@ -32,31 +51,35 @@ const router = createRouter({
           component: () => import('../views/TraceView.vue'),
         },
         {
-          path: 'personal',
-          name: 'Personal',
-          component: () => import('../views/PersonalView.vue'),
-        },
-        {
           path: 'evolution',
           name: 'Evolution',
-          meta: { requiresAdmin: true },
           component: () => import('../views/EvolutionView.vue'),
         },
+        { path: 'chat', name: 'OChat', component: () => import('../views/ChatView.vue') },
       ],
     },
   ],
 })
 
+function defaultHome(isAdmin: boolean) {
+  return isAdmin ? { name: 'Dashboard' } : { name: 'Chat' }
+}
+
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
   await auth.restore()
-  if (!auth.isAuthenticated && to.name !== 'Personal') {
-    return {
-      name: 'Personal',
-      query: { redirect: to.fullPath },
-    }
+
+  if (!auth.isAuthenticated) {
+    if (to.name === 'Login') return true
+    return { name: 'Login', query: { redirect: to.fullPath } }
   }
-  if (to.meta.requiresAdmin && !auth.isAdmin) return { name: 'Chat' }
+
+  if (to.name === 'Login') return defaultHome(auth.canAccessOPortal)
+
+  if (to.matched.some((record) => record.meta.requiresAdmin) && !auth.canAccessOPortal) {
+    return { name: 'Chat' }
+  }
+
   return true
 })
 

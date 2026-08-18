@@ -11,6 +11,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => user.value !== null)
   const isAdmin = computed(() => user.value?.role === 'admin')
+  // 账号能否进入 O 端；当前展示哪个端由路由决定，见 composables/usePortal.ts
+  const canAccessOPortal = computed(() => isAdmin.value)
 
   async function restore() {
     if (initialized.value) return
@@ -59,6 +61,7 @@ export const useAuthStore = defineStore('auth', () => {
     error,
     isAuthenticated,
     isAdmin,
+    canAccessOPortal,
     restore,
     login,
     logout,
