@@ -44,17 +44,19 @@ async function handleLogout() {
 </script>
 
 <template>
-  <aside class="w-60 h-screen bg-slate-900 text-slate-200 flex flex-col shrink-0 overflow-hidden">
-    <div class="p-4 border-b border-slate-700">
-      <div class="flex items-center gap-2">
+  <aside
+    class="w-60 h-screen flex flex-col shrink-0 overflow-hidden bg-gradient-to-b from-slate-950 to-slate-900 text-slate-200 border-r border-indigo-300/10"
+  >
+    <div class="px-4 py-4 border-b border-indigo-300/10">
+      <div class="flex items-center gap-2.5">
         <div
-          class="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center text-white font-bold text-sm"
+          class="w-9 h-9 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold shadow-sm"
         >
           O
         </div>
-        <div>
-          <div class="text-sm font-semibold text-white">MediZJ 运营端</div>
-          <div class="text-xs text-slate-400">平台管理与观测</div>
+        <div class="min-w-0">
+          <div class="text-sm font-semibold text-white leading-tight">MediZJ 运营端</div>
+          <div class="text-[11px] text-slate-400 mt-0.5">平台管理与观测</div>
         </div>
       </div>
     </div>
@@ -64,13 +66,17 @@ async function handleLogout() {
         v-for="item in navItems"
         :key="item.path"
         :to="item.path"
-        class="flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition"
+        class="relative flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl transition"
         :class="
           route.path.startsWith(item.path)
-            ? 'bg-slate-700 text-white'
-            : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
+            ? 'bg-indigo-400/15 text-white font-medium'
+            : 'text-slate-300 hover:bg-white/5 hover:text-white'
         "
       >
+        <span
+          v-if="route.path.startsWith(item.path)"
+          class="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-indigo-400"
+        />
         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" :d="item.icon" />
         </svg>
@@ -78,10 +84,10 @@ async function handleLogout() {
       </router-link>
     </nav>
 
-    <div class="p-3 border-t border-slate-700 space-y-2">
+    <div class="p-3 border-t border-indigo-300/10 space-y-2">
       <router-link
         to="/chat"
-        class="flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition text-slate-300 hover:bg-slate-700/50 hover:text-white"
+        class="flex items-center gap-3 px-3 py-2 text-sm rounded-xl transition text-slate-300 hover:bg-white/5 hover:text-white"
       >
         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -94,11 +100,15 @@ async function handleLogout() {
         <span class="truncate">返回用户端</span>
       </router-link>
 
-      <div class="px-3 py-2 rounded-lg bg-slate-800">
+      <div class="rounded-xl bg-white/5 px-3 py-3 border border-white/5">
         <div class="text-sm text-white truncate">{{ auth.user?.username }}</div>
-        <div class="text-[10px] text-indigo-300 mt-0.5">管理员</div>
+        <div
+          class="mt-1 inline-flex rounded-full bg-indigo-400/15 px-1.5 py-0.5 text-[10px] font-medium text-indigo-200"
+        >
+          管理员
+        </div>
         <button
-          class="mt-2 w-full py-1.5 text-xs text-slate-200 bg-slate-700 rounded hover:bg-slate-600 transition"
+          class="mt-3 w-full rounded-lg bg-white/10 py-1.5 text-xs text-slate-200 hover:bg-white/15 transition"
           @click="handleLogout"
         >
           退出登录
@@ -106,6 +116,6 @@ async function handleLogout() {
       </div>
     </div>
 
-    <div class="px-3 pb-3 text-xs text-slate-600">MediZJ Agent Swarm v0.1.0</div>
+    <div class="px-3 pb-3 text-xs text-slate-500">MediZJ Agent Swarm v0.1.0</div>
   </aside>
 </template>

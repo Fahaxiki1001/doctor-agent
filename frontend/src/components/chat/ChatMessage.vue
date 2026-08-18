@@ -205,12 +205,12 @@ watch(
 </script>
 
 <template>
-  <div class="py-5">
+  <div class="py-5 sm:py-6">
     <div class="max-w-3xl mx-auto px-4">
       <!-- 用户消息 -->
       <div v-if="isUser" class="flex justify-end">
         <div
-          class="bg-gradient-to-br from-blue-600 to-blue-500 text-white px-4 py-2.5 rounded-2xl rounded-br-md max-w-[80%] text-sm leading-relaxed shadow-sm"
+          class="bg-gradient-to-br from-blue-600 to-blue-500 text-white px-4 py-3 rounded-2xl rounded-br-md max-w-[80%] text-sm leading-relaxed shadow-design-sm"
         >
           <!-- 图片缩略图 -->
           <div v-if="message.images?.length" class="flex gap-1 mb-2 flex-wrap justify-end">
@@ -233,7 +233,7 @@ watch(
         <!-- 回答内容 -->
         <div class="flex gap-3">
           <div
-            class="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm"
+            class="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center shrink-0 shadow-design-sm"
           >
             <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -244,7 +244,9 @@ watch(
               />
             </svg>
           </div>
-          <div class="flex-1 min-w-0 bg-white rounded-2xl border border-slate-200/70 shadow-sm px-4 py-3">
+          <div
+            class="flex-1 min-w-0 surface-card rounded-2xl border shadow-design-sm px-4 py-4 sm:px-5"
+          >
             <div
               v-if="message.isStreaming && !message.content"
               class="flex items-center gap-1 text-slate-400 text-sm"
@@ -580,10 +582,10 @@ watch(
             <!-- 免责声明（仅对话最后一条消息在元信息上方展示） -->
             <div
               v-if="showDisclaimer"
-              class="mt-3 flex items-start gap-2 pl-3 py-2 border-l-2 border-amber-300 bg-amber-50/60 rounded-r-lg text-xs text-amber-700"
+              class="mt-4 flex items-start gap-2 pl-3 py-2.5 border-l-2 border-slate-300 bg-slate-50 rounded-r-lg text-xs text-slate-600"
             >
               <svg
-                class="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-500"
+                class="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-500"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -600,12 +602,12 @@ watch(
 
             <div
               v-if="message.assistantMessageId && !message.isStreaming"
-              class="mt-2 text-xs text-slate-400"
+              class="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-400"
             >
               <div class="flex items-center gap-1.5">
                 <span class="mr-1">这个回答有帮助吗？</span>
                 <button
-                  class="rounded-full px-2.5 py-1 border transition"
+                  class="rounded-full px-3 py-1.5 border transition-colors"
                   :class="
                     feedbackRating === 'like'
                       ? 'bg-blue-50 text-blue-600 border-blue-200'
@@ -617,7 +619,7 @@ watch(
                   ♥ 有帮助
                 </button>
                 <button
-                  class="rounded-full px-2.5 py-1 border transition"
+                  class="rounded-full px-3 py-1.5 border transition-colors"
                   :class="
                     feedbackRating === 'dislike'
                       ? 'bg-red-50 text-red-600 border-red-200'
@@ -629,9 +631,16 @@ watch(
                   × 需改进
                 </button>
               </div>
-              <div v-if="feedbackOpen" class="mt-2 rounded-xl bg-slate-50 border border-slate-200 p-3">
+              <div
+                v-if="feedbackOpen"
+                class="mt-3 rounded-xl bg-slate-50/80 border border-slate-200 p-3 shadow-design-sm"
+              >
                 <div class="mb-2 flex flex-wrap gap-2">
-                  <label v-for="option in reasonOptions" :key="option[0]" class="flex gap-1">
+                  <label
+                    v-for="option in reasonOptions"
+                    :key="option[0]"
+                    class="flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 text-slate-600"
+                  >
                     <input v-model="feedbackReasons" type="checkbox" :value="option[0]" />
                     {{ option[1] }}
                   </label>
@@ -639,11 +648,11 @@ watch(
                 <textarea
                   v-model="feedbackComment"
                   maxlength="1000"
-                  class="w-full rounded-lg border border-slate-200 p-2 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  class="w-full rounded-lg border border-slate-200 p-2 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="可选：告诉我们具体哪里需要改进"
                 />
                 <button
-                  class="mt-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 px-3 py-1.5 text-white disabled:opacity-50 hover:shadow-sm transition"
+                  class="mt-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 px-3 py-1.5 text-white disabled:opacity-50 hover:shadow-design-sm transition"
                   :disabled="feedbackSaving"
                   @click="saveFeedback"
                 >

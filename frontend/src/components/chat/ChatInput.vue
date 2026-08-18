@@ -24,9 +24,7 @@ const imageInputRef = ref<HTMLInputElement | null>(null)
 const dragOver = ref(false)
 
 const hasImages = computed(() => selectedImages.value.length > 0)
-const anyImagesReady = computed(() =>
-  selectedImages.value.some((img) => img.url && !img.uploading),
-)
+const anyImagesReady = computed(() => selectedImages.value.some((img) => img.url && !img.uploading))
 
 function triggerImageSelect() {
   imageInputRef.value?.click()
@@ -40,11 +38,13 @@ function handleImageSelect(e: Event) {
   }
 }
 
-function handlePaste(e: ClipboardEvent) {
-  const items = e.clipboardData?.items
+function handlePaste(e: Event) {
+  const clipboardData = Reflect.get(e, 'clipboardData') as
+    { items?: ArrayLike<{ type: string; getAsFile: () => File | null }> } | undefined
+  const items = clipboardData?.items
   if (!items) return
   const imageFiles: File[] = []
-  for (const item of items) {
+  for (const item of Array.from(items)) {
     if (item.type.startsWith('image/')) {
       const file = item.getAsFile()
       if (file) imageFiles.push(file)
@@ -104,7 +104,9 @@ function handleSend() {
   if (hasImages.value && !anyImagesReady.value) return
 
   // 只发送成功上传的图片，过滤失败和上传中的
-  const urls = selectedImages.value.filter((img) => img.url && !img.uploading).map((img) => img.url!)
+  const urls = selectedImages.value
+    .filter((img) => img.url && !img.uploading)
+    .map((img) => img.url!)
   emit('send', q || '请帮我分析这张图片', urls.length > 0 ? urls : undefined)
 
   input.value = ''
@@ -124,13 +126,13 @@ function handleKeydown(e: KeyboardEvent) {
 
 <template>
   <div
-    class="border-t border-slate-200 bg-white p-4 relative"
+    class="relative rounded-t-2xl border border-slate-200/80 bg-white p-3 shadow-design-md sm:p-4"
     @dragover.prevent="dragOver = true"
     @dragleave.prevent="dragOver = false"
     @drop.prevent="handleDrop"
   >
     <!-- 图片预览区 -->
-    <div v-if="hasImages" class="flex gap-2 mb-3 flex-wrap max-w-4xl mx-auto">
+    <div v-if="hasImages" class="mb-3 flex max-w-3xl flex-wrap gap-2 mx-auto">
       <div
         v-for="(img, idx) in selectedImages"
         :key="idx"
@@ -142,15 +144,14 @@ function handleKeydown(e: KeyboardEvent) {
           v-if="img.uploading"
           class="absolute inset-0 bg-black/40 flex items-center justify-center"
         >
-          <svg
-            class="w-5 h-5 text-white animate-spin"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
+          <svg class="w-5 h-5 text-white animate-spin" fill="none" viewBox="0 0 24 24">
             <circle
               class="opacity-25"
-              cx="12" cy="12" r="10"
-              stroke="currentColor" stroke-width="4"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
             />
             <path
               class="opacity-75"
@@ -170,28 +171,35 @@ function handleKeydown(e: KeyboardEvent) {
         <!-- 删除按钮 -->
         <button
           @click="removeImage(idx)"
-          class="absolute top-0.5 right-0.5 w-4 h-4 bg-black/50 rounded-full text-white items-center justify-center hover:bg-black/70 hidden group-hover:flex transition"
+          class="absolute top-0.5 right-0.5 hidden h-4 w-4 items-center justify-center rounded-full bg-black/50 text-white group-hover:flex focus:flex hover:bg-black/70 transition"
           title="移除图片"
         >
           <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="3"
+              d="M6 18L18 6M6 6l12 12"
+            />
           </svg>
         </button>
       </div>
     </div>
 
     <!-- 输入区域 -->
-    <div class="flex gap-3 items-end max-w-4xl mx-auto">
+    <div class="flex max-w-3xl items-end gap-2.5 mx-auto sm:gap-3">
       <!-- 图片选择按钮 -->
       <button
         @click="triggerImageSelect"
         :disabled="disabled"
-        class="shrink-0 w-10 h-10 rounded-xl border border-slate-300 text-slate-500 flex items-center justify-center hover:bg-slate-100 hover:text-blue-500 disabled:opacity-50 transition"
+        class="shrink-0 w-10 h-10 rounded-xl border border-slate-300 text-slate-500 flex items-center justify-center hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50 transition"
         title="添加图片"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
-            stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
             d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
           />
         </svg>
@@ -213,13 +221,13 @@ function handleKeydown(e: KeyboardEvent) {
         :disabled="disabled"
         placeholder="输入您的健康问题...（支持粘贴图片）"
         rows="1"
-        class="flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed min-h-[44px] max-h-32"
+        class="min-h-[44px] max-h-32 flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
       />
 
       <button
         @click="handleSend"
         :disabled="disabled || (!input.trim() && !hasImages) || (hasImages && !anyImagesReady)"
-        class="shrink-0 w-10 h-10 rounded-xl bg-blue-500 text-white flex items-center justify-center hover:bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed transition"
+        class="shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-500 text-white flex items-center justify-center shadow-design-sm hover:from-blue-500 hover:to-blue-400 hover:shadow-design-md disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none disabled:cursor-not-allowed transition-all"
         title="发送"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -236,7 +244,7 @@ function handleKeydown(e: KeyboardEvent) {
     <!-- 拖拽覆盖层 -->
     <div
       v-if="dragOver"
-      class="absolute inset-0 bg-blue-50/80 border-2 border-dashed border-blue-400 rounded-b-lg flex items-center justify-center z-10 pointer-events-none"
+      class="absolute inset-0 z-10 flex items-center justify-center rounded-t-2xl border-2 border-dashed border-blue-400 bg-blue-50/90 pointer-events-none"
     >
       <span class="text-blue-500 text-sm font-medium">释放以添加图片</span>
     </div>

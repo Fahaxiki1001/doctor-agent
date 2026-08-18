@@ -26,11 +26,13 @@ async function handleLogin() {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-    <section class="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
+  <div
+    class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50/70 via-slate-50 to-teal-50/50 px-4"
+  >
+    <section class="surface-card w-full max-w-md rounded-2xl border p-8 shadow-design-lg">
       <div class="text-center mb-6">
         <div
-          class="w-12 h-12 mx-auto mb-3 rounded-xl bg-blue-500 text-white flex items-center justify-center font-bold"
+          class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-500 font-bold text-white shadow-design-sm"
         >
           M
         </div>
@@ -45,18 +47,20 @@ async function handleLogin() {
           maxlength="64"
           pattern="[A-Za-z0-9_-]+"
           placeholder="用户名"
-          class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         />
         <div v-if="auth.error" class="text-sm text-red-600">{{ auth.error }}</div>
         <button
           type="submit"
           :disabled="auth.loading || !username.trim()"
-          class="w-full py-2.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:bg-slate-300 transition"
+          class="w-full rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 py-2.5 text-sm text-white shadow-design-sm hover:from-blue-700 hover:to-blue-600 disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none transition-all"
         >
           {{ auth.loading ? '登录中...' : '登录' }}
         </button>
       </form>
-      <p class="mt-5 text-xs leading-relaxed text-amber-600 bg-amber-50 rounded-lg p-3">
+      <p
+        class="mt-5 rounded-lg border-l-2 border-slate-300 bg-slate-50 px-3 py-2.5 text-xs leading-relaxed text-slate-600"
+      >
         当前为免密登录，仅适用于本地或可信网络环境，请勿用于公开生产环境。
       </p>
     </section>

@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
   /* 主色梯度 */
@@ -48,15 +48,61 @@ body,
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: var(--color-bg);
   color: #1e293b;
 }
 
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* 组件使用的语义层级，令牌集中维护，避免页面背景与卡片失去层次。 */
+.surface-page {
+  background: var(--surface-page);
+}
+
+.surface-page-o {
+  background: var(--surface-page-o);
+}
+
+.surface-card {
+  background: var(--surface-card);
+  border-color: var(--border-subtle);
+}
+
+.shadow-design-sm {
+  box-shadow: var(--shadow-sm);
+}
+.shadow-design-md {
+  box-shadow: var(--shadow-md);
+}
+.shadow-design-lg {
+  box-shadow: var(--shadow-lg);
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
 
 /* 统一键盘可达焦点样式 */
 :focus-visible {
@@ -70,16 +116,42 @@ body {
 }
 
 /* 会话列表：悬停时才显示滚动条 */
-.group\/sessions .scrollbar-thin::-webkit-scrollbar-thumb { background: transparent; }
-.group\/sessions:hover .scrollbar-thin::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+.group\/sessions .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+.group\/sessions:hover .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 3px;
+}
 
 /* Markdown 内容样式 */
-.markdown-body h1 { font-size: 1.5rem; font-weight: 700; margin: 1rem 0 0.5rem; }
-.markdown-body h2 { font-size: 1.25rem; font-weight: 600; margin: 0.8rem 0 0.4rem; }
-.markdown-body h3 { font-size: 1.1rem; font-weight: 600; margin: 0.6rem 0 0.3rem; }
-.markdown-body p { margin: 0.4rem 0; line-height: 1.7; }
-.markdown-body ul, .markdown-body ol { padding-left: 1.5rem; margin: 0.4rem 0; }
-.markdown-body li { margin: 0.2rem 0; }
+.markdown-body h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 1rem 0 0.5rem;
+}
+.markdown-body h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0.8rem 0 0.4rem;
+}
+.markdown-body h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.6rem 0 0.3rem;
+}
+.markdown-body p {
+  margin: 0.5rem 0;
+  line-height: 1.75;
+}
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.5rem;
+  margin: 0.4rem 0;
+}
+.markdown-body li {
+  margin: 0.2rem 0;
+}
 .markdown-body code {
   background: #f1f5f9;
   padding: 0.15rem 0.4rem;
@@ -93,17 +165,35 @@ body {
   border-radius: var(--radius-md);
   overflow-x: auto;
 }
-.markdown-body pre code { background: transparent; padding: 0; color: inherit; }
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
 .markdown-body blockquote {
-  border-left: 3px solid #3b82f6;
+  border-left: 3px solid var(--brand-500);
   padding-left: 1rem;
   margin: 0.5rem 0;
   color: #64748b;
 }
-.markdown-body strong { font-weight: 600; }
-.markdown-body table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
-.markdown-body th, .markdown-body td { border: 1px solid var(--border-subtle); padding: 0.5rem; text-align: left; }
-.markdown-body th { background: var(--surface-muted); font-weight: 600; }
+.markdown-body strong {
+  font-weight: 600;
+}
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--border-subtle);
+  padding: 0.5rem;
+  text-align: left;
+}
+.markdown-body th {
+  background: var(--surface-muted);
+  font-weight: 600;
+}
 
 /* 引用标注样式 */
 .markdown-body .citation-ref {
@@ -111,20 +201,22 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 0.7em;
-  color: #2563eb;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
+  color: var(--brand-700);
+  background: var(--brand-50);
+  border: 1px solid var(--brand-100);
   border-radius: 3px;
   padding: 0 2px;
   margin: 0 1px;
   cursor: pointer;
   line-height: 1.4;
   vertical-align: super;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
   user-select: none;
 }
 .markdown-body .citation-ref:hover {
-  background: #dbeafe;
-  border-color: #93c5fd;
-  color: #1d4ed8;
+  background: var(--brand-100);
+  border-color: var(--brand-500);
+  color: var(--brand-700);
 }

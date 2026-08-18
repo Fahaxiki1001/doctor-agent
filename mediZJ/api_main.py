@@ -8,6 +8,7 @@ import argparse
 from pathlib import Path
 
 import uvicorn
+from dotenv import load_dotenv
 
 
 def main():
@@ -18,6 +19,8 @@ def main():
     args = parser.parse_args()
 
     project_root = Path(__file__).resolve().parent.parent
+    # Load local development configuration before uvicorn imports the app.
+    load_dotenv(project_root / ".env")
     uvicorn.run(
         "mediZJ.api.main:app",
         host=args.host,

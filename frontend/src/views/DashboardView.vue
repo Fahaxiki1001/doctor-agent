@@ -79,7 +79,7 @@ function getAgentBarWidth(count: unknown): number {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto p-6">
+  <div class="surface-page-o h-full overflow-y-auto p-4 sm:p-6">
     <div class="max-w-5xl mx-auto">
       <div v-if="loading" class="text-center py-12 text-slate-400">加载中...</div>
       <div v-else-if="error" class="text-center py-12">
@@ -92,7 +92,7 @@ function getAgentBarWidth(count: unknown): number {
           <div
             v-for="card in statCards"
             :key="card.key"
-            class="bg-white border border-slate-200 rounded-xl p-4"
+            class="surface-card rounded-xl border p-4 shadow-design-sm transition-shadow hover:shadow-design-md"
           >
             <div class="flex items-center gap-3">
               <div
@@ -109,7 +109,9 @@ function getAgentBarWidth(count: unknown): number {
                 </svg>
               </div>
               <div>
-                <div class="text-2xl font-bold text-slate-800">{{ getStatValue(card.key) }}</div>
+                <div class="tabular-figures text-2xl font-bold text-slate-800">
+                  {{ getStatValue(card.key) }}
+                </div>
                 <div class="text-xs text-slate-500">{{ card.label }}</div>
               </div>
             </div>
@@ -119,10 +121,10 @@ function getAgentBarWidth(count: unknown): number {
         <!-- Swarm 平均指标 -->
         <div
           v-if="stats.avg_parallel_efficiency > 0"
-          class="bg-white border border-slate-200 rounded-xl p-5 mb-6"
+          class="surface-card mb-6 rounded-xl border p-5 shadow-design-sm"
         >
           <h3 class="text-sm font-semibold text-slate-700 mb-4">Swarm 协作平均指标</h3>
-          <div class="grid grid-cols-3 gap-6">
+          <div class="grid grid-cols-1 gap-5 sm:grid-cols-3 sm:gap-6">
             <div>
               <div class="flex items-center justify-between mb-1">
                 <span class="text-xs text-slate-500">并行效率</span>
@@ -172,7 +174,7 @@ function getAgentBarWidth(count: unknown): number {
         </div>
 
         <!-- Agent 使用分布 -->
-        <div class="bg-white border border-slate-200 rounded-xl p-5 mb-6">
+        <div class="surface-card mb-6 rounded-xl border p-5 shadow-design-sm">
           <h3 class="text-sm font-semibold text-slate-700 mb-4">Agent 使用分布</h3>
           <div class="space-y-3">
             <div
@@ -193,7 +195,7 @@ function getAgentBarWidth(count: unknown): number {
         </div>
 
         <!-- 最近会话 -->
-        <div class="bg-white border border-slate-200 rounded-xl p-5">
+        <div class="surface-card rounded-xl border p-5 shadow-design-sm">
           <h3 class="text-sm font-semibold text-slate-700 mb-4">最近会话</h3>
           <div
             v-if="stats.recent_sessions.length === 0"
@@ -205,9 +207,9 @@ function getAgentBarWidth(count: unknown): number {
             <div
               v-for="s in stats.recent_sessions"
               :key="s.session_id"
-              class="py-2 px-3 rounded-lg hover:bg-slate-50 text-sm"
+              class="rounded-lg px-3 py-2 text-sm hover:bg-slate-50 transition-colors"
             >
-              <div class="flex items-center gap-3">
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span
                   class="w-1.5 h-1.5 rounded-full shrink-0"
                   :class="s.mode === 'swarm' ? 'bg-green-400' : 'bg-slate-300'"
@@ -228,7 +230,7 @@ function getAgentBarWidth(count: unknown): number {
               <!-- Swarm 会话的性能指标 -->
               <div
                 v-if="s.mode === 'swarm' && s.parallel_efficiency > 0"
-                class="flex items-center gap-4 mt-1.5 ml-4 text-[11px]"
+                class="mt-1.5 ml-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px]"
               >
                 <div class="flex items-center gap-1.5 flex-1">
                   <span class="text-slate-400 w-14 shrink-0">并行效率</span>

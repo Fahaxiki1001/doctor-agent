@@ -242,7 +242,9 @@ watch(
 
     <!-- 最近会话列表 -->
     <div class="group/sessions flex-1 flex flex-col min-h-0 mt-2 px-3 overflow-hidden">
-      <div class="shrink-0 px-3 pt-1.5 pb-3 text-xs text-slate-500 font-medium uppercase tracking-wide">
+      <div
+        class="shrink-0 px-3 pt-1.5 pb-3 text-xs text-slate-500 font-medium uppercase tracking-wide"
+      >
         最近会话
       </div>
       <div class="flex-1 min-h-0 overflow-y-auto pb-2 scrollbar-thin relative space-y-0.5">

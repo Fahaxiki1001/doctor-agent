@@ -52,10 +52,13 @@ watch(
         v-if="chatStore.messages.length === 0"
         class="h-full flex flex-col items-center justify-center text-slate-400 px-4"
       >
-        <div
-          class="w-20 h-20 mb-5 rounded-full bg-blue-50 flex items-center justify-center"
-        >
-          <svg class="w-10 h-10 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="w-20 h-20 mb-5 rounded-full bg-blue-50 flex items-center justify-center">
+          <svg
+            class="w-10 h-10 text-blue-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -75,7 +78,12 @@ watch(
             @click="handleSend(q)"
             class="flex items-center gap-2 text-left text-xs px-3 py-3 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-blue-300 hover:shadow-md hover:-translate-y-px hover:text-blue-600 transition-all"
           >
-            <svg class="w-4 h-4 shrink-0 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              class="w-4 h-4 shrink-0 text-blue-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"

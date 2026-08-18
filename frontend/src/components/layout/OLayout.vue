@@ -8,7 +8,7 @@ import AppHeader from './AppHeader.vue'
     <OSidebar />
     <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
       <AppHeader />
-      <main class="flex-1 min-h-0 overflow-hidden">
+      <main class="surface-page-o flex-1 min-h-0 overflow-hidden">
         <router-view />
       </main>
     </div>

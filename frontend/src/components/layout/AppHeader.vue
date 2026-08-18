@@ -25,13 +25,19 @@ const title = computed(() => {
 })
 
 const portalLabel = computed(() => (route.meta.portal === 'o' ? '运营端' : '用户端'))
+const isOPortal = computed(() => route.meta.portal === 'o')
 </script>
 
 <template>
   <header
-    class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0"
+    class="h-16 surface-card border-b border-slate-200/80 flex items-center justify-between px-4 sm:px-6 shrink-0"
   >
-    <h1 class="text-lg font-semibold text-slate-800">{{ title }}</h1>
-    <span class="text-xs text-slate-400">{{ portalLabel }}</span>
+    <h1 class="min-w-0 truncate text-lg font-medium text-slate-800">{{ title }}</h1>
+    <span
+      class="ml-4 shrink-0 rounded-full px-2.5 py-1 text-xs font-medium"
+      :class="isOPortal ? 'bg-indigo-50 text-indigo-700' : 'bg-blue-50 text-blue-700'"
+    >
+      {{ portalLabel }}
+    </span>
   </header>
 </template>
