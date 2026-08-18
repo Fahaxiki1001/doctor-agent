@@ -321,17 +321,20 @@ def build_agent_subgraph(
         if not messages:
             return {"final_answer": "", "completed": True}
 
-        last_msg = messages[-1]
-        # 兼容 LangChain AIMessage 对象和 dict
-        if hasattr(last_msg, 'type') and not isinstance(last_msg, dict):
-            content = getattr(last_msg, 'content', "") or ""
-        else:
-            content = last_msg.get("content", "") if isinstance(last_msg, dict) else ""
+        content = _extract_assistant_content(messages[-1])
 
         iteration = state.get("iteration", 0)
         usage = state.get("usage", {})
         references = state.get("references", [])
         msg_count = state.get("message_count", 0)
+
+        # 尾部不是 assistant 消息（如工具结果）→ 不得用其内容当正文
+        if content is None:
+            return {
+                "final_answer": state.get("final_answer", ""),
+                "completed": True,
+                "message_count": msg_count,
+            }
 
         result = {
             "answer": content,
@@ -417,7 +420,9 @@ def build_agent_subgraph(
             return "force_answer"
 
         if state.get("completed"):
-            return "done"
+            # LLM 调用异常：兜底文案已写入 final_answer，不能进 finalize_answer
+            # （该节点会用 messages[-1] 覆盖，此时尾部是工具结果）
+            return "error_exit" if state.get("error") else "done"
 
         messages = state.get("messages", [])
         if not messages:
@@ -492,6 +497,7 @@ def build_agent_subgraph(
             "tool_execution": "tool_execution",
             "force_answer": "force_answer",
             "done": "finalize_answer",
+            "error_exit": END,
         }
     )
 
@@ -517,6 +523,22 @@ def build_agent_subgraph(
 
 
 # ===== 辅助函数 =====
+
+def _extract_assistant_content(message: Any) -> Optional[str]:
+    """提取 assistant 消息正文；消息不是 assistant 角色时返回 None
+
+    工具结果（ToolMessage / role=tool）不是模型正文，不能当最终回答使用。
+    """
+    if hasattr(message, 'type') and not isinstance(message, dict):
+        if message.type != "ai":
+            return None
+        return getattr(message, 'content', "") or ""
+    if isinstance(message, dict):
+        if message.get("role") != "assistant":
+            return None
+        return message.get("content", "") or ""
+    return None
+
 
 def _format_answers(questions_ref: List[Dict], answers: Dict[str, Any]) -> str:
     """将用户回答格式化为 LLM 可读文本"""

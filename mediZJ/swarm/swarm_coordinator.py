@@ -435,19 +435,21 @@ class SwarmCoordinator:
             ),
         }
 
-        # LTM fire-and-forget
-        ltm_task = asyncio.ensure_future(self._save_long_term_memory(
-            session_id=session_id,
-            question=question,
-            answer=result["answer"],
-            metadata={
-                "mode": result_state.get("mode", "langgraph"),
-                "subtasks_count": len(result_state.get("subtasks", [])),
-                "total_time": result["total_time"],
-                "total_tokens": result["usage"].get("total_tokens", 0),
-            },
-        ))
-        result["_ltm_save_task"] = ltm_task
+        # LTM fire-and-forget（闲聊模式跳过：寒暄无记忆价值，且省一次 LLM 评估）
+        if not result_state.get("chat_mode"):
+            result["_ltm_save_task"] = asyncio.ensure_future(
+                self._save_long_term_memory(
+                    session_id=session_id,
+                    question=question,
+                    answer=result["answer"],
+                    metadata={
+                        "mode": result_state.get("mode", "langgraph"),
+                        "subtasks_count": len(result_state.get("subtasks", [])),
+                        "total_time": result["total_time"],
+                        "total_tokens": result["usage"].get("total_tokens", 0),
+                    },
+                )
+            )
 
         logger.info(
             f"[LangGraph] 处理完成: mode={result['mode']}, "

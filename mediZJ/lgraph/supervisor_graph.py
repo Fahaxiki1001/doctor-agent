@@ -1019,11 +1019,11 @@ def build_supervisor_graph(
         }
 
     async def _finalize(state: SupervisorState) -> dict:
-        """节点: 统一收尾（替代 coordinator._finalize）"""
-        if state.get("_swarm_finalized"):
-            return {}
+        """节点: 统一收尾（替代 coordinator._finalize）
 
-        session_id = state["session_id"]
+        LTM 抽取不在此触发——统一由 coordinator.compose_result 负责，
+        它把任务句柄交给调用方 await，异常可见且不会重复抽取。
+        """
         start_time_str = state.get("start_time", "")
         try:
             start_time = datetime.fromisoformat(start_time_str) if start_time_str else datetime.now()
@@ -1032,27 +1032,6 @@ def build_supervisor_graph(
 
         end_time = datetime.now()
         total_time = (end_time - start_time).total_seconds()
-
-        # LTM fire-and-forget（闲聊模式跳过：寒暄无记忆价值，且省一次 LLM 评估）
-        final_answer = state.get("final_answer", "")
-        mode = state.get("mode", "single_agent")
-        usage = state.get("usage", {})
-        chat_mode = state.get("chat_mode", False)
-
-        if not chat_mode:
-            asyncio.ensure_future(
-                coordinator._save_long_term_memory(
-                    session_id=session_id,
-                    question=state["question"],
-                    answer=final_answer,
-                    metadata={
-                        "mode": mode,
-                        "subtasks_count": len(state.get("subtasks", [])),
-                        "total_time": total_time,
-                        "total_tokens": usage.get("total_tokens", 0),
-                    },
-                )
-            )
 
         return {
             "total_time": total_time,
