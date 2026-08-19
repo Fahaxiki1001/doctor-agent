@@ -7,7 +7,7 @@ const route = useRoute()
 const chatStore = useChatStore()
 
 const pageTitles: Record<string, string> = {
-  Chat: '智能问答',
+  Chat: '健康咨询',
   OChat: '调试对话',
   Knowledge: '知识库运营',
   Dashboard: '仪表盘',
@@ -15,8 +15,8 @@ const pageTitles: Record<string, string> = {
   TraceDetail: 'Trace 详情',
   Evolution: '自进化中心',
   Personal: '个人中心',
-  Triage: '症状自测',
-  TriageDetail: '症状自测结果',
+  Triage: '就医紧急度评估',
+  TriageDetail: '症状分诊结果',
   KnowledgeCenter: '健康知识中心',
   Reports: '报告解读',
   ReportDetail: '报告详情',
@@ -25,7 +25,7 @@ const pageTitles: Record<string, string> = {
 const title = computed(() => {
   const name = route.name as string
   if (name === 'ChatSession') {
-    return chatStore.sessionTitle || '智能问答'
+    return chatStore.sessionTitle || '健康咨询'
   }
   return pageTitles[name] || 'MediZJ'
 })

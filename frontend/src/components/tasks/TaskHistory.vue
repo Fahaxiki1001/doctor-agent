@@ -20,7 +20,7 @@ const visible = computed(() =>
   ),
 )
 const typeLabel = {
-  triage: '症状自测',
+  triage: '症状分诊',
   knowledge_search: '知识搜索',
   report_interpretation: '报告解读',
 }
@@ -58,7 +58,7 @@ async function load() {
 
 function summary(task: HealthTask) {
   if (task.task_type === 'triage')
-    return String(task.result.urgency || task.input_snapshot.symptom || '症状自测')
+    return String(task.result.urgency || task.input_snapshot.symptom || '症状分诊')
   if (task.task_type === 'knowledge_search')
     return String(task.result.query || task.input_snapshot.query || '知识搜索')
   return `报告任务 · ${statusLabel[task.status] || task.status}`
@@ -99,13 +99,13 @@ onMounted(load)
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 class="text-lg font-semibold text-slate-800">健康任务记录</h2>
-        <p class="mt-1 text-sm text-slate-500">自测、知识搜索和报告解读可在这里再次查看</p>
+        <p class="mt-1 text-sm text-slate-500">分诊、知识搜索和报告解读可在这里再次查看</p>
       </div>
       <div class="grid w-full grid-cols-2 gap-2 sm:w-auto">
         <div class="relative min-w-0 sm:w-36">
           <select v-model="filter" :class="selectClass" aria-label="按类型筛选健康任务">
             <option value="">全部类型</option>
-            <option value="triage">症状自测</option>
+            <option value="triage">症状分诊</option>
             <option value="knowledge_search">知识搜索</option>
             <option value="report_interpretation">报告解读</option>
           </select>

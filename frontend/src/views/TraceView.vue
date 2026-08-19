@@ -104,7 +104,7 @@
               <span class="relative block">
                 <select v-model="filters.task_type" :class="selectClass" aria-label="任务类型">
                   <option value="">全部任务类型</option>
-                  <option value="triage">症状自测</option>
+                  <option value="triage">症状分诊</option>
                   <option value="knowledge_search">知识搜索</option>
                   <option value="report_interpretation">报告解读</option>
                 </select>
@@ -597,7 +597,7 @@ function modeBadge(mode: string): string {
 
 function taskTypeLabel(taskType: string): string {
   const labels: Record<string, string> = {
-    triage: '症状自测',
+    triage: '症状分诊',
     knowledge_search: '知识搜索',
     report_interpretation: '报告解读',
   }

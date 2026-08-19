@@ -2,16 +2,18 @@
 import { ref, reactive, computed, watch } from 'vue'
 import type { QuestionnaireData } from '../../types'
 
+type QuestionnaireAnswer = string | string[]
+
 const props = defineProps<{
   questionnaire: QuestionnaireData
   error?: string
 }>()
 
 const emit = defineEmits<{
-  submit: [answers: Record<string, any>]
+  submit: [answers: Record<string, QuestionnaireAnswer>]
 }>()
 
-const answers = reactive<Record<string, any>>({})
+const answers = reactive<Record<string, QuestionnaireAnswer>>({})
 const otherTexts = reactive<Record<string, string>>({})
 const submitted = ref(false)
 const activeTab = ref(0)
@@ -71,6 +73,11 @@ function prev() {
 
 function next() {
   if (activeTab.value < total.value - 1) activeTab.value++
+}
+
+function handleEnumChange(key: string) {
+  otherTexts[key] = ''
+  next()
 }
 
 function handleSubmit() {
@@ -153,7 +160,7 @@ function handleSubmit() {
               :value="opt.label"
               v-model="answers[currentKey]"
               class="sr-only"
-              @change="otherTexts[currentKey] = ''"
+              @change="handleEnumChange(currentKey)"
             />
             <span class="qc-radio" />
             <span class="qc-opt-text">

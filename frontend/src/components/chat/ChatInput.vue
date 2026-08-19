@@ -226,7 +226,7 @@ function handleKeydown(e: KeyboardEvent) {
         @keydown="handleKeydown"
         @paste="handlePaste"
         :disabled="disabled"
-        placeholder="输入您的健康问题...（支持粘贴图片）"
+        placeholder="咨询健康知识、用药或生活方式...（支持粘贴图片）"
         rows="1"
         class="min-h-[44px] max-h-32 flex-1 resize-none rounded-xl border border-slate-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
       />

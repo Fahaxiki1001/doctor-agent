@@ -15,12 +15,12 @@ const auth = useAuthStore()
 const navItems = [
   {
     path: '/chat',
-    label: '智能问答',
+    label: '健康咨询',
     icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z',
   },
   {
     path: '/triage',
-    label: '症状自测',
+    label: '症状分诊',
     icon: 'M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z',
   },
   {

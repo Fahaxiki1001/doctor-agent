@@ -11,6 +11,7 @@ import type { QuestionnaireData } from '../types'
 const store = useTriageStore()
 const route = useRoute()
 const router = useRouter()
+const initialSymptom = computed(() => String(route.query.symptom || ''))
 
 const questionnaire = computed<QuestionnaireData | null>(() => {
   const value = store.current?.questionnaire
@@ -38,12 +39,50 @@ async function restart() {
   await router.replace('/triage')
 }
 
-onMounted(() => store.restore(route.params.taskId as string | undefined))
+async function continueConsultation() {
+  const current = store.current
+  const result = current?.result
+  if (!current || !result) return
+  const symptom = String(current.task.input_snapshot.symptom || '')
+  sessionStorage.setItem(
+    'medizj_chat_context',
+    JSON.stringify({
+      source: 'triage',
+      triage_task_id: current.task.task_id,
+      symptom,
+      assessment: {
+        risk_level: result.risk_level,
+        urgency: result.urgency,
+        key_findings: result.key_findings,
+        next_steps: result.next_steps,
+        limitations: result.limitations,
+      },
+    }),
+  )
+  await router.push({
+    name: 'Chat',
+    query: { ask: '请结合刚才的症状分诊结果，说明接下来需要注意的护理事项。' },
+  })
+}
+
+onMounted(async () => {
+  const taskId = route.params.taskId as string | undefined
+  if (!taskId && initialSymptom.value) {
+    store.reset()
+    return
+  }
+  await store.restore(taskId)
+})
 </script>
 
 <template>
   <div class="h-full overflow-y-auto bg-slate-50 pb-20 lg:pb-0">
-    <TriageStartCard v-if="!store.current" :loading="store.loading" @start="start" />
+    <TriageStartCard
+      v-if="!store.current"
+      :loading="store.loading"
+      :initial-symptom="initialSymptom"
+      @start="start"
+    />
     <div
       v-if="store.error"
       role="alert"
@@ -54,7 +93,7 @@ onMounted(() => store.restore(route.params.taskId as string | undefined))
     <div v-if="store.current" class="mx-auto max-w-3xl px-4 py-6 sm:px-6">
       <div class="mb-4 flex items-center justify-between gap-3">
         <p class="text-sm text-slate-500">
-          自测记录 {{ new Date(store.current.task.created_at).toLocaleString('zh-CN') }}
+          分诊记录 {{ new Date(store.current.task.created_at).toLocaleString('zh-CN') }}
         </p>
         <div class="flex items-center gap-4">
           <button
@@ -62,10 +101,10 @@ onMounted(() => store.restore(route.params.taskId as string | undefined))
             class="text-sm font-medium text-red-700 hover:text-red-900"
             @click="store.cancel"
           >
-            放弃自测
+            放弃分诊
           </button>
           <button class="text-sm font-medium text-blue-700 hover:text-blue-900" @click="restart">
-            重新自测
+            重新评估
           </button>
         </div>
       </div>
@@ -73,7 +112,11 @@ onMounted(() => store.restore(route.params.taskId as string | undefined))
         v-if="store.current.result?.risk_level === 'emergency'"
         :result="store.current.result"
       />
-      <RiskResultCard v-else-if="store.current.result" :result="store.current.result" />
+      <RiskResultCard
+        v-else-if="store.current.result"
+        :result="store.current.result"
+        @continue-consultation="continueConsultation"
+      />
       <QuestionnaireCard
         v-else-if="questionnaire"
         :questionnaire="questionnaire"
