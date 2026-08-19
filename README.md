@@ -12,6 +12,7 @@
 - **🌐 Web 前端界面**: Vue 3 + FastAPI 全栈架构，支持智能问答、知识库浏览、会话管理、仪表盘 ✅
 - **📡 流式响应**: 实时推送 Agent 执行过程，可视化 Agent 参与情况 ✅
 - **🩺 交互式问诊**: LeadAgent 在任务分发前通过结构化问卷收集用户背景信息（症状、病史、用药等），基于 LangGraph interrupt/Command 挂起恢复，支持 **LLM 自决多轮追问**（硬上限 3 轮），实现"先问后诊" ✅
+- **普通用户健康工具**: 独立提供症状自测与风险分诊、可追溯来源的健康知识中心、检查报告结构化提取与确认后解读 ✅
 - **🔧 Skill + Tool 双层架构**: 10个原子 Skills（指令+工具）与底层 Tool 调用明确分层，activate_skill 激活后注入指令并动态加载工具 ✅
 - **🤖 LangGraph Agent 子图**: LLM 驱动的 Skill 调用循环（AgentSubGraph），Worker 自主规划、调用 Skills 并完成任务 ✅
 - **🤖 统一 Agent 委派**: 单 Agent 与 Swarm 共用 `AgentSubGraph` 执行机制，Worker 隔离子会话、无历史上下文，路由由 LeadAgent 评估自动决定 ✅
@@ -592,12 +593,15 @@ Worker 由轻量 `Worker` 规格（`mediZJ/lgraph/worker.py`）承载，三个�
 | 页面 | 功能 | 路由 |
 |------|------|------|
 | **智能问答** | 聊天式问答，实时展示 Agent 协作过程，Markdown 渲染 | `/chat` |
-| **知识库** | 医学知识语义搜索、文档管理（增删改查）、文件上传、chunk 查看 | `/knowledge` |
+| **健康知识中心（C 端）** | 只读搜索、来源预览、继续咨询 | `/knowledge` |
+| **症状自测（C 端）** | 高危预检、结构化问卷、风险分层 | `/triage` |
+| **报告解读（C 端）** | 上传、提取确认、确认后解释 | `/reports` |
 | **历史会话** | 会话列表在侧边栏展示：查看/恢复、删除、新建 | 侧边栏 |
-| **仪表盘** | 统计概览、Agent 使用分布、最近会话 | `/dashboard` |
+| **知识库运营（O 端）** | 文档增删改查、上传、chunk 查看 | `/o/knowledge` |
+| **运营仪表盘（O 端）** | 统计概览、健康任务质量、最近会话 | `/o/dashboard` |
 | **个人中心** | 免密登录 + 查看/编辑个人健康档案（年龄、性别、病史等） | `/personal` |
-| **Trace 追踪** | 请求追踪、Agent 耗时分析、LLM 调用详情、工具调用统计 | `/traces`、`/trace/:traceId` |
-| **自进化** | 对话质量评审、经验流转（观察/激活/退役）、失败归因源码、发布回滚、任务重试（管理员） | `/evolution` |
+| **Trace 追踪（O 端）** | 请求追踪、任务与安全属性筛选、耗时分析 | `/o/traces`、`/o/trace/:traceId` |
+| **自进化（O 端）** | 对话质量评审、经验流转、失败归因、发布回滚 | `/o/evolution` |
 
 ### Web 架构
 
@@ -631,6 +635,7 @@ SharedContext.on_event_callback → 事件推送
 | GET | `/api/auth/me` | 当前用户 |
 | POST | `/api/knowledge/search` | 知识库搜索（去重，返回完整文档） |
 | GET | `/api/knowledge/types` | 知识库类型列表 |
+| GET | `/api/knowledge/documents/{doc_id}/preview` | C 端只读来源预览 |
 | GET | `/api/knowledge/documents` | 文档列表 |
 | GET | `/api/knowledge/documents/{doc_id}/chunks` | 查看文档分块 |
 | DELETE | `/api/knowledge/documents/{doc_id}` | 删除文档 |
@@ -640,6 +645,13 @@ SharedContext.on_event_callback → 事件推送
 | GET | `/api/sessions/{session_id}` | 会话详情 |
 | DELETE | `/api/sessions/{session_id}` | 删除会话 |
 | GET | `/api/dashboard/stats` | 仪表盘统计 |
+| GET | `/api/tasks` | 当前用户健康任务历史 |
+| POST | `/api/tasks/{task_id}/feedback` | 提交健康任务反馈 |
+| POST | `/api/triage/tasks` | 创建症状自测任务 |
+| POST | `/api/triage/tasks/{task_id}/answer` | 提交分诊问卷 |
+| POST | `/api/reports` | 上传检查报告 |
+| POST | `/api/reports/{report_id}/analyze` | 提取报告草稿 |
+| PUT | `/api/reports/{report_id}/measurements/confirm` | 确认指标并生成解释 |
 | GET | `/api/health` | 健康检查 |
 | GET | `/api/personal` | 获取个人健康档案 |
 | PUT | `/api/personal` | 更新个人健康档案 |
