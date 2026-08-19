@@ -1,7 +1,8 @@
 # MediZJ多智能体医疗助手
 
 基于 Skill + Tool 双层架构的多智能体协作医疗助手系统，融合 LangGraph Agent 子图、Agent Swarm、记忆管理、Milvus 知识库和 Web 前端界面。
-![alt text](mediZJ/assets/image.png)
+
+![MediZJ 健康咨询首页](mediZJ/assets/image.png)
 
 ## 📋 项目概述
 
