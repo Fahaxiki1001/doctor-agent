@@ -14,8 +14,11 @@ from mediZJ.api.routers import (
     evolution,
     knowledge,
     personal,
+    reports,
     sessions,
+    tasks,
     traces,
+    triage,
 )
 from mediZJ.memory.session_db import SessionDB
 
@@ -84,6 +87,9 @@ app.include_router(knowledge.router)
 app.include_router(sessions.router)
 app.include_router(dashboard.router)
 app.include_router(personal.router)
+app.include_router(tasks.router)
+app.include_router(triage.router)
+app.include_router(reports.router)
 app.include_router(traces.router)
 app.include_router(evolution.router)
 
@@ -94,6 +100,13 @@ async def start_evolution_worker():
     from mediZJ.evolution import EvolutionService
 
     await EvolutionService().start()
+    from mediZJ.api.services.image_upload_service import ImageUploadService
+    from mediZJ.api.services.report_service import ReportService
+    from mediZJ.api.services.task_service import TaskService
+
+    ReportService().recover_stale()
+    TaskService().recover_expired()
+    ImageUploadService().cleanup_expired()
 
 
 @app.on_event("shutdown")

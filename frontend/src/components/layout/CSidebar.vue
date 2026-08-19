@@ -18,6 +18,21 @@ const navItems = [
     label: '智能问答',
     icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z',
   },
+  {
+    path: '/triage',
+    label: '症状自测',
+    icon: 'M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z',
+  },
+  {
+    path: '/knowledge',
+    label: '知识中心',
+    icon: 'M12 6.25a6.75 6.75 0 00-8-1.5v13a6.75 6.75 0 018 1.5m0-13a6.75 6.75 0 018-1.5v13a6.75 6.75 0 00-8 1.5m0-13v13',
+  },
+  {
+    path: '/reports',
+    label: '报告解读',
+    icon: 'M9 12h6m-6 4h6M9 8h2m-5-5h8l4 4v14H6V3z',
+  },
 ]
 
 const sessions = ref<SessionItem[]>([])

@@ -31,7 +31,11 @@ export const useChatStore = defineStore('chat', () => {
 
   const { connect, disconnect } = useSSE()
 
-  async function sendMessage(question: string, images?: string[]) {
+  async function sendMessage(
+    question: string,
+    images?: string[],
+    context?: Record<string, unknown>,
+  ) {
     if (isStreaming.value || (!question.trim() && !images?.length)) return
 
     error.value = null
@@ -77,6 +81,7 @@ export const useChatStore = defineStore('chat', () => {
           question,
           session_id: sessionId.value,
           images: images?.length ? images : undefined,
+          context,
         },
         {
           onStart(data) {

@@ -118,6 +118,52 @@ function getAgentBarWidth(count: unknown): number {
           </div>
         </div>
 
+        <section
+          v-if="stats.health_task_stats"
+          class="surface-card mb-6 rounded-xl border p-5 shadow-design-sm"
+        >
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h3 class="text-sm font-semibold text-slate-700">健康任务质量</h3>
+            <span
+              class="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700"
+            >
+              普通用户端
+            </span>
+          </div>
+          <div class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+            <div class="rounded-lg bg-slate-50 p-3">
+              <p class="text-xs text-slate-500">任务总数</p>
+              <p class="mt-1 text-xl font-semibold tabular-figures">
+                {{ stats.health_task_stats.total }}
+              </p>
+            </div>
+            <div class="rounded-lg bg-emerald-50/70 p-3">
+              <p class="text-xs text-slate-500">完成率</p>
+              <p class="mt-1 text-xl font-semibold text-emerald-700 tabular-figures">
+                {{ (stats.health_task_stats.completion_rate * 100).toFixed(1) }}%
+              </p>
+            </div>
+            <div class="rounded-lg bg-slate-50 p-3">
+              <p class="text-xs text-slate-500">问卷放弃率</p>
+              <p class="mt-1 text-xl font-semibold tabular-figures">
+                {{ (stats.health_task_stats.questionnaire_abandonment_rate * 100).toFixed(1) }}%
+              </p>
+            </div>
+            <div class="rounded-lg bg-slate-50 p-3">
+              <p class="text-xs text-slate-500">知识无结果率</p>
+              <p class="mt-1 text-xl font-semibold tabular-figures">
+                {{ (stats.health_task_stats.knowledge_empty_rate * 100).toFixed(1) }}%
+              </p>
+            </div>
+            <div class="rounded-lg bg-slate-50 p-3">
+              <p class="text-xs text-slate-500">报告确认率</p>
+              <p class="mt-1 text-xl font-semibold tabular-figures">
+                {{ (stats.health_task_stats.report_confirmation_rate * 100).toFixed(1) }}%
+              </p>
+            </div>
+          </div>
+        </section>
+
         <!-- Swarm 平均指标 -->
         <div
           v-if="stats.avg_parallel_efficiency > 0"

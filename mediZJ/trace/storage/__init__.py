@@ -1,4 +1,5 @@
 """Trace SQLite 存储后端"""
+
 import json
 import os
 import sqlite3
@@ -36,7 +37,7 @@ def _safe_asdict(obj):
         return asdict(obj)
     if isinstance(obj, dict):
         return obj
-    if hasattr(obj, '__dict__'):
+    if hasattr(obj, "__dict__"):
         return vars(obj)
     return {"_value": str(obj)}
 
@@ -108,6 +109,12 @@ class TraceSqliteStorage:
                 agents_involved  TEXT,
                 span_count       INTEGER DEFAULT 0,
                 question_summary TEXT DEFAULT '',
+                task_id          TEXT DEFAULT '',
+                task_type        TEXT DEFAULT '',
+                task_status      TEXT DEFAULT '',
+                risk_level       TEXT DEFAULT '',
+                safety_decision  TEXT DEFAULT '',
+                error_code       TEXT DEFAULT '',
                 tree_json        TEXT NOT NULL,
                 created_at       TEXT NOT NULL
             );
@@ -140,20 +147,32 @@ class TraceSqliteStorage:
         """)
         try:
             conn.execute(
-                "ALTER TABLE traces ADD COLUMN "
-                "user_id TEXT NOT NULL DEFAULT 'default'"
+                "ALTER TABLE traces ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'"
             )
         except sqlite3.OperationalError:
             pass
+        for column in (
+            "task_id TEXT DEFAULT ''",
+            "task_type TEXT DEFAULT ''",
+            "task_status TEXT DEFAULT ''",
+            "risk_level TEXT DEFAULT ''",
+            "safety_decision TEXT DEFAULT ''",
+            "error_code TEXT DEFAULT ''",
+        ):
+            try:
+                conn.execute(f"ALTER TABLE traces ADD COLUMN {column}")
+            except sqlite3.OperationalError:
+                pass
         try:
-            conn.execute(
-                "ALTER TABLE traces ADD COLUMN first_token_time_ms REAL"
-            )
+            conn.execute("ALTER TABLE traces ADD COLUMN first_token_time_ms REAL")
         except sqlite3.OperationalError:
             pass
         conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_trace_user "
-            "ON traces(user_id, start_time)"
+            "CREATE INDEX IF NOT EXISTS idx_trace_user ON traces(user_id, start_time)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_trace_task_filters "
+            "ON traces(task_type, task_status, safety_decision, error_code)"
         )
 
     def save(self, root_span, flat_spans: List):
@@ -163,6 +182,7 @@ class TraceSqliteStorage:
             root_span: 根 Span 对象（已构建树）
             flat_spans: 扁平 Span 列表
         """
+
         def _do_save(conn: sqlite3.Connection):
             now = datetime.now().isoformat()
             # 使用 spans 的 trace_id 作为表主键（= session_id）
@@ -179,21 +199,30 @@ class TraceSqliteStorage:
             first_token_time_ms = (
                 trace_attrs.first_token_time_ms if trace_attrs else None
             )
+            task_id = trace_attrs.task_id if trace_attrs else ""
+            task_type = trace_attrs.task_type if trace_attrs else ""
+            task_status = trace_attrs.task_status if trace_attrs else ""
+            risk_level = trace_attrs.risk_level if trace_attrs else ""
+            safety_decision = trace_attrs.safety_decision if trace_attrs else ""
+            error_code = trace_attrs.error_code if trace_attrs else ""
 
             # 写入 traces 表（先写，满足 FK 约束）
             conn.execute(
                 """INSERT OR REPLACE INTO traces
                    (trace_id, session_id, user_id, status, start_time, end_time,
                     duration_ms, first_token_time_ms, mode, total_tokens, agents_involved,
-                    span_count, question_summary, tree_json, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    span_count, question_summary, task_id, task_type, task_status,
+                    risk_level, safety_decision, error_code, tree_json, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     trace_id,
                     session_id,
                     user_id,
                     root_span.status.value,
                     root_span.timing.start_time.isoformat(),
-                    root_span.timing.end_time.isoformat() if root_span.timing.end_time else None,
+                    root_span.timing.end_time.isoformat()
+                    if root_span.timing.end_time
+                    else None,
                     root_span.timing.duration_ms,
                     first_token_time_ms,
                     mode,
@@ -201,7 +230,17 @@ class TraceSqliteStorage:
                     json.dumps(agents_involved, ensure_ascii=False),
                     len(flat_spans),
                     question_summary,
-                    json.dumps(self._span_to_tree_dict(root_span), ensure_ascii=False, default=str),
+                    task_id,
+                    task_type,
+                    task_status,
+                    risk_level,
+                    safety_decision,
+                    error_code,
+                    json.dumps(
+                        self._span_to_tree_dict(root_span),
+                        ensure_ascii=False,
+                        default=str,
+                    ),
                     now,
                 ),
             )
@@ -222,12 +261,20 @@ class TraceSqliteStorage:
                         span.name,
                         span.status.value,
                         span.timing.start_time.isoformat(),
-                        span.timing.end_time.isoformat() if span.timing.end_time else None,
+                        span.timing.end_time.isoformat()
+                        if span.timing.end_time
+                        else None,
                         span.timing.duration_ms,
                         span.error_message,
-                        json.dumps(_safe_asdict(span.llm_attrs), ensure_ascii=False) if span.llm_attrs else None,
-                        json.dumps(_safe_asdict(span.tool_attrs), ensure_ascii=False) if span.tool_attrs else None,
-                        json.dumps(_safe_asdict(span.agent_attrs), ensure_ascii=False) if span.agent_attrs else None,
+                        json.dumps(_safe_asdict(span.llm_attrs), ensure_ascii=False)
+                        if span.llm_attrs
+                        else None,
+                        json.dumps(_safe_asdict(span.tool_attrs), ensure_ascii=False)
+                        if span.tool_attrs
+                        else None,
+                        json.dumps(_safe_asdict(span.agent_attrs), ensure_ascii=False)
+                        if span.agent_attrs
+                        else None,
                     ),
                 )
 
@@ -239,6 +286,7 @@ class TraceSqliteStorage:
         user_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """获取完整 trace 树（从 tree_json）"""
+
         def _do_get(conn: sqlite3.Connection):
             if user_id is None:
                 row = conn.execute(
@@ -247,11 +295,11 @@ class TraceSqliteStorage:
                 ).fetchone()
             else:
                 row = conn.execute(
-                    "SELECT tree_json FROM traces "
-                    "WHERE trace_id = ? AND user_id = ?",
+                    "SELECT tree_json FROM traces WHERE trace_id = ? AND user_id = ?",
                     (trace_id, user_id),
                 ).fetchone()
             return json.loads(row["tree_json"]) if row else None
+
         return self._execute(_do_get)
 
     def get_flat_spans(
@@ -260,11 +308,11 @@ class TraceSqliteStorage:
         user_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """获取扁平 span 列表"""
+
         def _do_get(conn: sqlite3.Connection):
             if user_id is not None:
                 owner = conn.execute(
-                    "SELECT 1 FROM traces "
-                    "WHERE trace_id = ? AND user_id = ?",
+                    "SELECT 1 FROM traces WHERE trace_id = ? AND user_id = ?",
                     (trace_id, user_id),
                 ).fetchone()
                 if owner is None:
@@ -274,6 +322,7 @@ class TraceSqliteStorage:
                 (trace_id,),
             ).fetchall()
             return [dict(r) for r in rows]
+
         return self._execute(_do_get)
 
     def list_traces(
@@ -282,87 +331,86 @@ class TraceSqliteStorage:
         offset: int = 0,
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
+        task_type: Optional[str] = None,
+        task_status: Optional[str] = None,
+        safety_decision: Optional[str] = None,
+        error_code: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """列出最近 trace"""
+
         def _do_list(conn: sqlite3.Connection):
-            if session_id and user_id:
-                rows = conn.execute(
-                    """SELECT trace_id, session_id, status, start_time, duration_ms,
-                              first_token_time_ms, mode, total_tokens, agents_involved, span_count,
-                              question_summary
-                       FROM traces WHERE session_id = ? AND user_id = ?
-                       ORDER BY start_time DESC LIMIT ? OFFSET ?""",
-                    (session_id, user_id, limit, offset),
-                ).fetchall()
-            elif session_id:
-                rows = conn.execute(
-                    """SELECT trace_id, session_id, status, start_time, duration_ms,
-                              first_token_time_ms, mode, total_tokens, agents_involved, span_count,
-                              question_summary
-                       FROM traces WHERE session_id = ?
-                       ORDER BY start_time DESC LIMIT ? OFFSET ?""",
-                    (session_id, limit, offset),
-                ).fetchall()
-            elif user_id:
-                rows = conn.execute(
-                    """SELECT trace_id, session_id, status, start_time, duration_ms,
-                              first_token_time_ms, mode, total_tokens, agents_involved, span_count,
-                              question_summary
-                       FROM traces WHERE user_id = ?
-                       ORDER BY start_time DESC LIMIT ? OFFSET ?""",
-                    (user_id, limit, offset),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    """SELECT trace_id, session_id, status, start_time, duration_ms,
-                              first_token_time_ms, mode, total_tokens, agents_involved, span_count,
-                              question_summary
-                       FROM traces ORDER BY start_time DESC LIMIT ? OFFSET ?""",
-                    (limit, offset),
-                ).fetchall()
+            clauses = []
+            params: List[Any] = []
+            for column, value in (
+                ("session_id", session_id),
+                ("user_id", user_id),
+                ("task_type", task_type),
+                ("task_status", task_status),
+                ("safety_decision", safety_decision),
+                ("error_code", error_code),
+            ):
+                if value is not None:
+                    clauses.append(f"{column} = ?")
+                    params.append(value)
+            where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+            params.extend([limit, offset])
+            rows = conn.execute(
+                "SELECT trace_id, session_id, status, start_time, duration_ms, "
+                "first_token_time_ms, mode, total_tokens, agents_involved, span_count, "
+                "question_summary, task_id, task_type, task_status, risk_level, "
+                f"safety_decision, error_code FROM traces{where} "
+                "ORDER BY start_time DESC LIMIT ? OFFSET ?",
+                params,
+            ).fetchall()
             results = []
             for r in rows:
                 d = dict(r)
                 d["agents_involved"] = _loads_agents(d["agents_involved"])
                 results.append(d)
             return results
+
         return self._execute(_do_list)
 
     def count_traces(
         self,
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
+        task_type: Optional[str] = None,
+        task_status: Optional[str] = None,
+        safety_decision: Optional[str] = None,
+        error_code: Optional[str] = None,
     ) -> int:
         """统计 trace 总数"""
+
         def _do_count(conn: sqlite3.Connection):
-            if session_id and user_id:
-                row = conn.execute(
-                    "SELECT COUNT(*) as cnt FROM traces "
-                    "WHERE session_id = ? AND user_id = ?",
-                    (session_id, user_id),
-                ).fetchone()
-            elif session_id:
-                row = conn.execute(
-                    "SELECT COUNT(*) as cnt FROM traces WHERE session_id = ?",
-                    (session_id,),
-                ).fetchone()
-            elif user_id:
-                row = conn.execute(
-                    "SELECT COUNT(*) as cnt FROM traces WHERE user_id = ?",
-                    (user_id,),
-                ).fetchone()
-            else:
-                row = conn.execute("SELECT COUNT(*) as cnt FROM traces").fetchone()
+            clauses = []
+            params: List[Any] = []
+            for column, value in (
+                ("session_id", session_id),
+                ("user_id", user_id),
+                ("task_type", task_type),
+                ("task_status", task_status),
+                ("safety_decision", safety_decision),
+                ("error_code", error_code),
+            ):
+                if value is not None:
+                    clauses.append(f"{column} = ?")
+                    params.append(value)
+            where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+            row = conn.execute(
+                f"SELECT COUNT(*) as cnt FROM traces{where}", params
+            ).fetchone()
             return row["cnt"]
+
         return self._execute(_do_count)
 
     def delete_trace(self, trace_id: str) -> bool:
         """删除指定 trace（spans 通过 FK ON DELETE CASCADE 自动删除）"""
+
         def _do_delete(conn: sqlite3.Connection):
-            cursor = conn.execute(
-                "DELETE FROM traces WHERE trace_id = ?", (trace_id,)
-            )
+            cursor = conn.execute("DELETE FROM traces WHERE trace_id = ?", (trace_id,))
             return cursor.rowcount > 0
+
         return self._execute(_do_delete)
 
     @staticmethod
@@ -376,7 +424,9 @@ class TraceSqliteStorage:
             "status": span.status.value,
             "timing": {
                 "start_time": span.timing.start_time.isoformat(),
-                "end_time": span.timing.end_time.isoformat() if span.timing.end_time else None,
+                "end_time": span.timing.end_time.isoformat()
+                if span.timing.end_time
+                else None,
                 "duration_ms": span.timing.duration_ms,
             },
         }

@@ -1,12 +1,12 @@
 """知识库接口的请求/响应模型"""
 from typing import Dict, Any, List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class KnowledgeSearchRequest(BaseModel):
     """知识库搜索请求"""
-    query: str
-    top_k: int = 5
+    query: str = Field(min_length=1, max_length=500)
+    top_k: int = Field(default=5, ge=1, le=20)
     filter_type: Optional[str] = None  # lifestyle / symptoms / disease_classification / clinical_guideline
 
 
@@ -22,6 +22,10 @@ class KnowledgeSearchResponse(BaseModel):
     """知识库搜索响应"""
     results: List[KnowledgeItem] = []
     total: int = 0
+    query: str = ""
+    search_id: str = ""
+    task_id: str = ""
+    category: Optional[str] = None
 
 
 class KnowledgeTypeInfo(BaseModel):
@@ -44,6 +48,10 @@ class DocumentSummary(BaseModel):
     disease: str
     source: str
     chunk_count: int
+    version: Optional[str] = None
+    published_at: Optional[str] = None
+    reviewed_at: Optional[str] = None
+    applicable_population: Optional[str] = None
 
 
 class DocumentListResponse(BaseModel):
@@ -89,3 +97,29 @@ class DocumentUpdateRequest(BaseModel):
     type: Optional[str] = None
     disease: Optional[str] = None
     source: Optional[str] = None
+    version: Optional[str] = None
+    published_at: Optional[str] = None
+    reviewed_at: Optional[str] = None
+    applicable_population: Optional[str] = None
+
+
+class KnowledgeDocumentPreview(BaseModel):
+    doc_id: str
+    title: str = ""
+    source: str = ""
+    type: str = ""
+    disease: str = ""
+    version: Optional[str] = None
+    published_at: Optional[str] = None
+    reviewed_at: Optional[str] = None
+    applicable_population: Optional[str] = None
+    content: str = ""
+
+
+class ContinueChatRequest(BaseModel):
+    document_ids: List[str] = Field(min_length=1, max_length=5)
+
+
+class ContinueChatResponse(BaseModel):
+    route: str = "/chat"
+    context: Dict[str, Any]

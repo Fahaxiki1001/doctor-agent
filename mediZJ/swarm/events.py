@@ -26,6 +26,11 @@ class EventType(Enum):
     AGENT_QUESTIONNAIRE_CANCELLED = "agent_questionnaire_cancelled"  # 问卷被取消（超时/系统取消）
     TRACE_SPAN = "trace_span"                    # Trace span 完成事件（实时推送）
     INTENT_CLASSIFIED = "intent_classified"      # 意图识别结果（检索门控）
+    HEALTH_TASK_STARTED = "task_started"
+    HEALTH_RISK_UPDATED = "risk_update"
+    HEALTH_SAFETY_WARNING = "safety_warning"
+    HEALTH_WAITING_CONFIRMATION = "waiting_confirmation"
+    HEALTH_TASK_COMPLETED = "task_completed"
 
 
 @dataclass
@@ -51,11 +56,43 @@ class Event:
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
+        # Task events may enter traces and browser streams. Never serialize report
+        # bodies or image payloads through this generic event channel.
+        sensitive_keys = {
+            "image_base64", "base64", "raw_report", "report_text",
+            "original_report", "image_bytes",
+        }
+        safe_data = {
+            key: value for key, value in self.data.items()
+            if key not in sensitive_keys
+        }
         return {
             "id": self.id,
             "type": self.type.value,
             "source_agent": self.source_agent,
             "timestamp": self.timestamp.isoformat(),
             "target_agents": self.target_agents,
-            "data": self.data
+            "data": safe_data
         }
+
+
+def health_task_event(
+    event_type: EventType,
+    task_id: str,
+    task_type: str,
+    data: Optional[Dict[str, Any]] = None,
+    source_agent: str = "health_task_runtime",
+) -> Event:
+    """Build a task event with the mandatory correlation fields."""
+
+    allowed = {
+        EventType.HEALTH_TASK_STARTED,
+        EventType.HEALTH_RISK_UPDATED,
+        EventType.HEALTH_SAFETY_WARNING,
+        EventType.HEALTH_WAITING_CONFIRMATION,
+        EventType.HEALTH_TASK_COMPLETED,
+    }
+    if event_type not in allowed:
+        raise ValueError("event_type is not a health-task event")
+    payload = {**(data or {}), "task_id": task_id, "task_type": task_type}
+    return Event(type=event_type, source_agent=source_agent, data=payload)

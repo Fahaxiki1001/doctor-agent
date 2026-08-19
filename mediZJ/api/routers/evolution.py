@@ -65,6 +65,17 @@ async def list_failures(
     return {"items": EvolutionService().storage.list_failures(limit)}
 
 
+@router.get("/health-reviews")
+async def list_health_safety_reviews(
+    limit: int = Query(100, ge=1, le=500),
+    _admin: dict = Depends(require_admin),
+):
+    """De-identified triage safety feedback requiring operator review."""
+    return {
+        "items": EvolutionService().storage.list_health_safety_reviews(limit)
+    }
+
+
 @router.get("/sources/{source_id}")
 async def get_source_snippet(
     source_id: str,

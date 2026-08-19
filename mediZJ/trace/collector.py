@@ -112,6 +112,26 @@ class TraceCollector:
 
         logger.info(f"[Trace] 已保存 {len(spans)} 个 span (trace={trace_id[:12]}...)")
 
+    def flush_sync(self, trace_id: str):
+        """Flush a trace from synchronous health-task services.
+
+        Health task endpoints include synchronous persistence paths (knowledge
+        search, cancellation).  A synchronous flush prevents the request from
+        returning before its Trace is queryable and avoids creating an
+        un-awaited event-loop task.
+        """
+        spans = self._spans.pop(trace_id, [])
+        if not spans:
+            return
+        root = self._build_tree(spans)
+        if self._storage:
+            try:
+                self._storage.save(root, spans)
+            except Exception as exc:
+                logger.error(f"[Trace] 同步存储写入失败: {exc}")
+        self._callbacks.pop(trace_id, None)
+        logger.info(f"[Trace] 已保存 {len(spans)} 个 span (trace={trace_id[:12]}...)")
+
     def get_flat_spans(self, trace_id: str) -> List[Span]:
         """获取指定 trace 的所有 span（扁平列表）"""
         return self._spans.get(trace_id, [])

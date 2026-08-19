@@ -610,14 +610,30 @@ const tabs = [
         <div class="mt-6 space-y-4">
           <div>
             <label class="block text-xs font-medium text-slate-600 mb-1">文档类型</label>
-            <select
-              v-model="uploadDocType"
-              class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option v-for="opt in docTypeOptions" :key="opt.value" :value="opt.value">
-                {{ opt.label }}
-              </option>
-            </select>
+            <div class="relative">
+              <select
+                v-model="uploadDocType"
+                class="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-3 pr-9 text-sm text-slate-700 shadow-sm transition hover:border-slate-300 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-100/70"
+              >
+                <option v-for="opt in docTypeOptions" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+              <svg
+                class="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="m8 10 4 4 4-4"
+                />
+              </svg>
+            </div>
           </div>
           <div>
             <label class="block text-xs font-medium text-slate-600 mb-1">疾病名称</label>

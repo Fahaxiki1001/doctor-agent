@@ -73,6 +73,31 @@ class EvolutionService:
         feedback["evaluation_job_id"] = job_id
         return feedback
 
+    def submit_health_task_feedback(
+        self,
+        *,
+        task_type: str,
+        task_status: str,
+        rating: str,
+        reason_codes: List[str],
+        safety_decision: str = "",
+    ) -> Dict[str, Any]:
+        """Accept only de-identified quality signals from health workflows.
+
+        Health tasks do not have an assistant message and therefore must not
+        enter the conversation judge/experience pipeline.  In particular, a
+        high-risk triage complaint is retained as an operational safety signal
+        and is never auto-published as a learned experience.
+        """
+
+        return self.storage.record_health_quality_signal(
+            task_type=task_type,
+            task_status=task_status,
+            rating=rating,
+            reason_codes=reason_codes,
+            safety_decision=safety_decision,
+        )
+
     def maybe_enqueue_sample(self, message_id: int, user_id: str) -> None:
         """按确定性采样率将无反馈回答加入评审队列。"""
         if not self.enabled:

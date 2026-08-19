@@ -51,6 +51,12 @@ class TraceAttributes:
     timeout_occurred: bool = False
     applied_experience_ids: List[str] = field(default_factory=list)
     experience_assignments: List[Dict[str, Any]] = field(default_factory=list)
+    task_id: str = ""
+    task_type: str = ""
+    task_status: str = ""
+    risk_level: str = ""
+    safety_decision: str = ""
+    error_code: str = ""
 
 
 @dataclass

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, ref, nextTick, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import ChatInput from '../components/chat/ChatInput.vue'
 import ChatMessage from '../components/chat/ChatMessage.vue'
 
 const route = useRoute()
+const router = useRouter()
 const chatStore = useChatStore()
 const messagesContainer = ref<HTMLElement | null>(null)
 
@@ -17,8 +18,21 @@ function scrollToBottom() {
   })
 }
 
+const initialQuestion = computed(() => String(route.query.ask || ''))
+
 async function handleSend(question: string, images?: string[]) {
-  await chatStore.sendMessage(question, images)
+  let context: Record<string, unknown> | undefined
+  const rawContext = sessionStorage.getItem('medizj_chat_context')
+  if (rawContext) {
+    try {
+      context = JSON.parse(rawContext)
+    } catch {
+      context = undefined
+    }
+    sessionStorage.removeItem('medizj_chat_context')
+  }
+  await chatStore.sendMessage(question, images, context)
+  if (route.query.ask) await router.replace({ name: 'Chat' })
   scrollToBottom()
 }
 
@@ -110,6 +124,11 @@ watch(
     </div>
 
     <!-- 输入框 -->
-    <ChatInput class="shrink-0" :disabled="chatStore.isStreaming" @send="handleSend" />
+    <ChatInput
+      class="shrink-0"
+      :disabled="chatStore.isStreaming"
+      :initial-value="initialQuestion"
+      @send="handleSend"
+    />
   </div>
 </template>

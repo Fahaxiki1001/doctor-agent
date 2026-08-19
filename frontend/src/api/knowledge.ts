@@ -1,5 +1,5 @@
 import api from './client'
-import type { DocumentSummary, ChunkDetail } from '../types'
+import type { DocumentSummary, ChunkDetail, KnowledgeDocumentPreview } from '../types'
 
 export interface KnowledgeSearchRequest {
   query: string
@@ -15,6 +15,26 @@ export async function searchKnowledge(request: KnowledgeSearchRequest) {
 export async function getKnowledgeTypes() {
   const { data } = await api.get('/knowledge/types')
   return data.types
+}
+
+export async function getKnowledgeCategories() {
+  const { data } = await api.get('/knowledge/categories')
+  return data.types as Array<{ key: string; label: string; description: string }>
+}
+
+export async function getKnowledgePreview(docId: string): Promise<KnowledgeDocumentPreview> {
+  const { data } = await api.get(`/knowledge/documents/${encodeURIComponent(docId)}/preview`)
+  return data
+}
+
+export async function continueKnowledgeChat(
+  searchId: string,
+  documentIds: string[],
+): Promise<{ route: string; context: Record<string, unknown> }> {
+  const { data } = await api.post(`/knowledge/searches/${searchId}/continue-chat`, {
+    document_ids: documentIds,
+  })
+  return data
 }
 
 export async function getDocuments(): Promise<{ documents: DocumentSummary[]; total: number }> {

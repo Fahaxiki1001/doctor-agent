@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import { useSSE } from '../useSSE'
 
 /**
  * 模拟 useSSE 的核心流解析逻辑（不涉及 fetch）
@@ -50,5 +51,40 @@ describe('useSSE 流解析', () => {
     const events = parseSSEBuffer('not json\n{"event":"start","data":{}}')
     expect(events).toHaveLength(1)
     expect(events[0].event).toBe('start')
+  })
+
+  it('应分发健康任务事件', async () => {
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            '{"event":"task_started","data":{"task_id":"t1","task_type":"triage","status":"processing"}}\n' +
+              '{"event":"risk_update","data":{"task_id":"t1","task_type":"triage","risk_level":"high"}}\n' +
+              '{"event":"task_completed","data":{"task_id":"t1","task_type":"triage","status":"completed"}}\n',
+          ),
+        )
+        controller.close()
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(stream, { status: 200 })))
+    const started = vi.fn()
+    const risk = vi.fn()
+    const completed = vi.fn()
+
+    await useSSE().connect(
+      '/api/test',
+      {},
+      {
+        onTaskStarted: started,
+        onRiskUpdate: risk,
+        onTaskCompleted: completed,
+      },
+    )
+
+    expect(started).toHaveBeenCalledWith(expect.objectContaining({ task_id: 't1' }))
+    expect(risk).toHaveBeenCalledWith(expect.objectContaining({ risk_level: 'high' }))
+    expect(completed).toHaveBeenCalledOnce()
+    vi.unstubAllGlobals()
   })
 })

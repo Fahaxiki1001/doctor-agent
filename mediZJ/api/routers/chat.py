@@ -1,9 +1,5 @@
 """问答路由"""
 import asyncio
-import uuid
-from pathlib import Path
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, Request, UploadFile, File, HTTPException
 from starlette.responses import StreamingResponse
 
@@ -16,47 +12,28 @@ from mediZJ.api.services.chat_service import (
     session_owner,
 )
 from mediZJ.api.auth import get_current_user
+from mediZJ.api.services.image_upload_service import (
+    ImageUploadError,
+    ImageUploadService,
+)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
-
-# 图片上传目录
-_UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "uploads"
-_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-_MAX_SIZE = 10 * 1024 * 1024  # 10MB
-
 
 def _validate_owned_images(images: list[str] | None, user: dict) -> None:
     """确保聊天引用的每张图片都属于当前用户。"""
 
     if not images:
         return
-    from mediZJ.memory.session_db import SessionDB
-
-    db = SessionDB()
+    service = ImageUploadService()
     for image_url in images:
-        filename = Path(image_url).name
-        metadata = db.get_upload(filename)
-        if metadata is None:
-            if user["role"] == "admin" and (_UPLOAD_DIR / filename).is_file():
-                continue
+        try:
+            service.ensure_owned(
+                image_url,
+                user["user_id"],
+                is_admin=user["role"] == "admin",
+            )
+        except FileNotFoundError:
             raise HTTPException(status_code=404, detail="Image not found")
-        if metadata["user_id"] != user["user_id"] and user["role"] != "admin":
-            raise HTTPException(status_code=404, detail="Image not found")
-
-
-def _detect_image_type(data: bytes) -> str | None:
-    """通过文件头魔数检测图片类型（替代 Python 3.13 中已移除的 imghdr）"""
-    if data[:3] == b'\xff\xd8\xff':
-        return 'jpeg'
-    if data[:8] == b'\x89PNG\r\n\x1a\n':
-        return 'png'
-    if data[:6] in (b'GIF87a', b'GIF89a'):
-        return 'gif'
-    if data[:4] == b'RIFF' and len(data) > 11 and data[8:12] == b'WEBP':
-        return 'webp'
-    return None
 
 
 @router.post("", response_model=ChatResponse)
@@ -188,48 +165,13 @@ async def upload_image(
     user: dict = Depends(get_current_user),
 ):
     """上传聊天图片（用于多模态分析）"""
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="文件名为空")
-
-    ext = Path(file.filename).suffix.lower()
-    if ext not in _ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400, detail=f"不支持的图片格式：{ext}，支持：{', '.join(sorted(_ALLOWED_EXTENSIONS))}")
-
-    content = await file.read()
-    if len(content) > _MAX_SIZE:
-        raise HTTPException(status_code=400, detail=f"图片过大（{len(content) / 1024 / 1024:.1f}MB），最大 10MB")
-    if len(content) == 0:
-        raise HTTPException(status_code=400, detail="文件为空")
-
-    # 通过文件头魔数检测图片类型（imghdr 在 Python 3.13 中已移除）
-    detected_type = _detect_image_type(content)
-    if detected_type is None:
-        raise HTTPException(status_code=400, detail="无法识别图片格式，请上传有效的 JPEG/PNG/GIF/WebP 图片")
-
-    unique_name = f"{datetime.now().strftime('%Y%m%d')}_{uuid.uuid4().hex[:12]}{ext}"
-    save_path = _UPLOAD_DIR / unique_name
-    save_path.write_bytes(content)
-
-    url = f"/uploads/{unique_name}"
-    mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-                ".gif": "image/gif", ".webp": "image/webp"}
-    content_type = mime_map.get(ext, "image/jpeg")
-
-    from mediZJ.memory.session_db import SessionDB
-    SessionDB().save_upload(
-        filename=unique_name,
-        user_id=user["user_id"],
-        original_name=file.filename,
-        content_type=content_type,
-        size=len(content),
-    )
-
-    from loguru import logger
-    logger.info(f"Image uploaded: {unique_name} ({len(content)} bytes)")
-
+    try:
+        saved = await ImageUploadService().save(file, user["user_id"])
+    except ImageUploadError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {
-        "url": url,
-        "filename": file.filename,
-        "size": len(content),
-        "content_type": content_type,
+        "url": saved.url,
+        "filename": saved.original_name,
+        "size": saved.size,
+        "content_type": saved.content_type,
     }

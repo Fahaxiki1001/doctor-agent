@@ -20,6 +20,11 @@ export type SSEEventType =
   | 'agent_questionnaire_cancelled'
   | 'intent_classified'
   | 'trace_span'
+  | 'task_started'
+  | 'risk_update'
+  | 'safety_warning'
+  | 'waiting_confirmation'
+  | 'task_completed'
   | 'suggestions'
   | 'done'
   | 'error'
@@ -166,6 +171,14 @@ export interface ErrorData {
   error: string
 }
 
+export interface HealthTaskEventData {
+  task_id: string
+  task_type: HealthTaskType
+  status?: HealthTaskStatus
+  risk_level?: RiskLevel
+  safety_decision?: string
+}
+
 // ============================================================
 // UI 模型
 // ============================================================
@@ -176,11 +189,134 @@ export interface QuestionOption {
 }
 
 export interface QuestionnaireQuestion {
+  id?: string
   header: string
-  type: 'enum' | 'multi' | 'input'
+  type: 'enum' | 'multi' | 'input' | 'number'
   required: boolean
   text: string
   options: QuestionOption[]
+}
+
+export type HealthTaskType = 'triage' | 'knowledge_search' | 'report_interpretation'
+export type HealthTaskStatus =
+  | 'created'
+  | 'collecting'
+  | 'processing'
+  | 'waiting_confirmation'
+  | 'completed'
+  | 'needs_medical_attention'
+  | 'failed'
+  | 'cancelled'
+
+export interface HealthTask {
+  task_id: string
+  task_type: HealthTaskType
+  session_id?: string | null
+  status: HealthTaskStatus
+  input_snapshot: Record<string, unknown>
+  result: Record<string, unknown>
+  safety_flags: Array<Record<string, unknown>>
+  trace_id?: string | null
+  expires_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type RiskLevel = 'low' | 'medium' | 'high' | 'emergency'
+
+export interface RiskAssessment {
+  risk_level: RiskLevel
+  urgency: string
+  confidence: number
+  key_findings: string[]
+  red_flags_checked: string[]
+  red_flags_found: string[]
+  next_steps: string[]
+  limitations: string[]
+  citations: Array<Record<string, unknown>>
+}
+
+export interface TriageQuestionnaire {
+  questionnaire_id: string
+  questions: Array<{
+    id: string
+    text: string
+    type: 'enum' | 'multi' | 'input' | 'number'
+    required: boolean
+    options?: string[]
+  }>
+}
+
+export interface TriageTaskResponse {
+  task: HealthTask
+  questionnaire?: TriageQuestionnaire | null
+  result?: RiskAssessment | null
+}
+
+export interface KnowledgeCenterItem {
+  id: string
+  content: string
+  metadata: Record<string, unknown>
+  score: number
+}
+
+export interface KnowledgeDocumentPreview {
+  doc_id: string
+  title: string
+  source: string
+  type: string
+  disease: string
+  version?: string | null
+  published_at?: string | null
+  reviewed_at?: string | null
+  applicable_population?: string | null
+  content: string
+}
+
+export type ReportStatus =
+  | 'uploaded'
+  | 'analyzing'
+  | 'waiting_confirmation'
+  | 'processing'
+  | 'completed'
+  | 'manual_review'
+  | 'failed'
+  | 'cancelled'
+
+export interface ReportMeasurement {
+  measurement_id: string
+  name: string
+  value?: string | null
+  unit?: string | null
+  reference_range?: string | null
+  abnormal_flag: 'low' | 'high' | 'normal' | 'unknown'
+  confidence: number
+  raw_text?: string | null
+  user_confirmed: boolean
+  unable_to_confirm: boolean
+  deleted?: boolean
+}
+
+export interface ReportInterpretation {
+  confirmed_measurements: Array<Record<string, unknown>>
+  explanations: Array<Record<string, unknown>>
+  medical_attention: string[]
+  limitations: string[]
+  citations: Array<Record<string, unknown>>
+  safety_decision: string
+}
+
+export interface ReportResponse {
+  report_id: string
+  task: HealthTask
+  document_type: 'lab_report' | 'physical_exam' | 'other'
+  status: ReportStatus
+  image_url: string
+  measurements: ReportMeasurement[]
+  result?: ReportInterpretation | null
+  error?: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface QuestionnaireData {
@@ -353,4 +489,14 @@ export interface DashboardStats {
   avg_parallel_efficiency: number
   avg_information_coverage: number
   avg_redundancy: number
+  health_task_stats?: {
+    total: number
+    completion_rate: number
+    questionnaire_abandonment_rate: number
+    knowledge_empty_rate: number
+    report_confirmation_rate: number
+    report_failure_rate: number
+    by_type: Record<string, number>
+    by_status: Record<string, number>
+  }
 }

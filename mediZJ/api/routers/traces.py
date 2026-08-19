@@ -69,6 +69,10 @@ async def list_traces(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     session_id: Optional[str] = None,
+    task_type: Optional[str] = None,
+    task_status: Optional[str] = None,
+    safety_decision: Optional[str] = None,
+    error_code: Optional[str] = None,
     user: dict = Depends(get_current_user),
 ):
     """最近 trace 列表"""
@@ -78,8 +82,19 @@ async def list_traces(
         offset=offset,
         session_id=session_id,
         user_id=user_id,
+        task_type=task_type,
+        task_status=task_status,
+        safety_decision=safety_decision,
+        error_code=error_code,
     )
-    total = _storage.count_traces(session_id=session_id, user_id=user_id)
+    total = _storage.count_traces(
+        session_id=session_id,
+        user_id=user_id,
+        task_type=task_type,
+        task_status=task_status,
+        safety_decision=safety_decision,
+        error_code=error_code,
+    )
     return {"traces": traces, "total": total, "limit": limit, "offset": offset}
 
 

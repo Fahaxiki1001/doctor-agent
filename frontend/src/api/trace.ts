@@ -12,6 +12,20 @@ export interface TraceSummary {
   agents_involved: string[]
   span_count: number
   question_summary: string
+  task_id: string
+  task_type: string
+  task_status: string
+  risk_level: string
+  safety_decision: string
+  error_code: string
+}
+
+export interface TraceFilters {
+  session_id?: string
+  task_type?: string
+  task_status?: string
+  safety_decision?: string
+  error_code?: string
 }
 
 export interface TraceListResponse {
@@ -93,9 +107,9 @@ export interface ErrorTraceItem {
   start_time: string
 }
 
-export async function getTraces(limit = 50, offset = 0, sessionId?: string) {
+export async function getTraces(limit = 50, offset = 0, filters: TraceFilters = {}) {
   const { data } = await api.get<TraceListResponse>('/traces', {
-    params: { limit, offset, session_id: sessionId },
+    params: { limit, offset, ...filters },
   })
   return data
 }

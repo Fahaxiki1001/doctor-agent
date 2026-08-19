@@ -31,7 +31,7 @@ export const useTraceStore = defineStore('trace', () => {
     loading.value = true
     error.value = null
     try {
-      traceList.value = await getTraces(limit, offset, sessionId)
+      traceList.value = await getTraces(limit, offset, sessionId ? { session_id: sessionId } : {})
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
       error.value = message

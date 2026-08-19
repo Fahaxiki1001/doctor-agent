@@ -393,6 +393,7 @@ async def _chat_stream_impl(
             question,
             payload.get("mode", "error"),
             payload,
+            runtime_context,
         )
 
     # 流式路径启用 HITL：构建带 checkpointer 的图，供 clarify interrupt 挂起/恢复
@@ -404,7 +405,11 @@ async def _chat_stream_impl(
     initial_state = coordinator.build_initial_state(
         question, runtime_context, session_id, start_time,
     )
-    config = {"configurable": {"thread_id": session_id}}
+    task_id = runtime_context.get("task_id")
+    checkpoint_id = (
+        f"{session_id}:task:{task_id}" if task_id else session_id
+    )
+    config = {"configurable": {"thread_id": checkpoint_id}}
     store_runtime(SessionRuntime(
         coordinator=coordinator,
         graph=graph,

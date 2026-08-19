@@ -11,9 +11,15 @@ const pageTitles: Record<string, string> = {
   OChat: '调试对话',
   Knowledge: '知识库运营',
   Dashboard: '仪表盘',
-  Traces: '轨迹',
-  TraceDetail: '轨迹详情',
+  Traces: 'Trace 追踪',
+  TraceDetail: 'Trace 详情',
+  Evolution: '自进化中心',
   Personal: '个人中心',
+  Triage: '症状自测',
+  TriageDetail: '症状自测结果',
+  KnowledgeCenter: '健康知识中心',
+  Reports: '报告解读',
+  ReportDetail: '报告详情',
 }
 
 const title = computed(() => {

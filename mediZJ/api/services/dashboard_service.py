@@ -3,6 +3,7 @@ from typing import Dict, List, Optional
 from mediZJ.api.services.session_service import list_sessions, get_session_detail
 from mediZJ.api.services.knowledge_service import get_knowledge_base_size
 from mediZJ.api.models.dashboard import DashboardStats
+from mediZJ.memory.session_db import SessionDB
 
 
 def get_dashboard_stats(user_id: Optional[str] = None) -> DashboardStats:
@@ -69,4 +70,5 @@ def get_dashboard_stats(user_id: Optional[str] = None) -> DashboardStats:
         avg_parallel_efficiency=round(avg_pe, 4),
         avg_information_coverage=round(avg_ic, 4),
         avg_redundancy=round(avg_rd, 4),
+        health_task_stats=SessionDB().get_health_task_metrics(user_id),
     )

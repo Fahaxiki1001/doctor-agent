@@ -288,7 +288,11 @@ class SwarmCoordinator:
         logger.info(f"[LangGraph] Processing (session={session_id}): {question[:300]}{'...' if len(question) > 300 else ''}")
 
         graph = self.build_graph(event_callback=self.event_callback)
-        config = {"configurable": {"thread_id": session_id}}
+        task_id = (context or {}).get("task_id")
+        checkpoint_id = (
+            f"{session_id}:task:{task_id}" if task_id else session_id
+        )
+        config = {"configurable": {"thread_id": checkpoint_id}}
         initial_state = self.build_initial_state(
             question, context, session_id, start_time,
         )
@@ -314,6 +318,7 @@ class SwarmCoordinator:
             question,
             result["mode"],
             result,
+            context,
         )
         return result
 
@@ -343,10 +348,15 @@ class SwarmCoordinator:
         start_time: datetime,
     ) -> Dict[str, Any]:
         """构建 SupervisorState 初始状态"""
+        task_context = context or {}
         return {
             "question": question,
             "session_id": session_id,
             "context": context or {},
+            "task_id": task_context.get("task_id", ""),
+            "task_type": task_context.get("task_type", ""),
+            "output_schema": task_context.get("output_schema", {}),
+            "safety_flags": task_context.get("safety_flags", []),
             "start_time": start_time.isoformat(),
             "clarify_complete": False,
             "clarify_round": 0,
@@ -479,7 +489,7 @@ class SwarmCoordinator:
             return None
 
     async def _flush_trace(
-        self, collector, trace_id, session_id, question, mode, result
+        self, collector, trace_id, session_id, question, mode, result, context=None
     ):
         """持久化 Trace 数据"""
         if collector is None:
@@ -510,6 +520,12 @@ class SwarmCoordinator:
                             "experience_assignments",
                             [],
                         ),
+                        task_id=str((context or {}).get("task_id", "")),
+                        task_type=str((context or {}).get("task_type", "")),
+                        task_status=str((context or {}).get("status", "")),
+                        risk_level=str((context or {}).get("risk_level", "")),
+                        safety_decision=str((context or {}).get("safety_decision", "")),
+                        error_code=str(result.get("error_code", "")),
                     )
                     break
             await collector.flush(trace_id)

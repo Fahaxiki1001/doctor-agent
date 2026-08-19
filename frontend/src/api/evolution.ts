@@ -41,13 +41,12 @@ export async function getEvolutionItems(kind: 'evaluations' | 'failures' | 'expe
   return data.items
 }
 
-export type ExperienceAction =
-  | 'observe'
-  | 'activate'
-  | 'reject'
-  | 'retire'
-  | 'reapply'
-  | 'delete'
+export async function getHealthSafetyReviews(): Promise<Record<string, unknown>[]> {
+  const { data } = await api.get('/evolution/health-reviews')
+  return data.items
+}
+
+export type ExperienceAction = 'observe' | 'activate' | 'reject' | 'retire' | 'reapply' | 'delete'
 
 export async function updateExperienceStatus(experienceId: string, action: ExperienceAction) {
   await api.post(`/evolution/experiences/${experienceId}/status`, { action })

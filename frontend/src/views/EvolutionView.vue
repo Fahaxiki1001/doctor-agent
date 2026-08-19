@@ -4,6 +4,7 @@ import {
   getEvolutionItems,
   getEvolutionOperations,
   getEvolutionOverview,
+  getHealthSafetyReviews,
   getSourceSnippet,
   retryEvolutionJob,
   rollbackEvolutionRelease,
@@ -28,6 +29,7 @@ const failures = ref<Item[]>([])
 const experiences = ref<Item[]>([])
 const jobs = ref<Item[]>([])
 const releases = ref<Item[]>([])
+const healthSafetyReviews = ref<Item[]>([])
 const loading = ref(true)
 const actionError = ref('')
 const sourceSnippet = ref<SourceSnippet | null>(null)
@@ -182,11 +184,18 @@ async function load() {
   loading.value = true
   try {
     const operations = getEvolutionOperations()
-    ;[overview.value, evaluations.value, failures.value, experiences.value] = await Promise.all([
+    ;[
+      overview.value,
+      evaluations.value,
+      failures.value,
+      experiences.value,
+      healthSafetyReviews.value,
+    ] = await Promise.all([
       getEvolutionOverview(),
       getEvolutionItems('evaluations'),
       getEvolutionItems('failures'),
       getEvolutionItems('experiences'),
+      getHealthSafetyReviews(),
     ])
     const operationData = await operations
     jobs.value = operationData.jobs
@@ -237,10 +246,10 @@ onMounted(load)
 </script>
 
 <template>
-  <main class="h-full overflow-y-auto bg-slate-50 p-6">
+  <div class="h-full overflow-y-auto bg-slate-50 p-4 sm:p-6">
     <div class="mx-auto max-w-6xl space-y-6">
       <div>
-        <h1 class="text-xl font-semibold text-slate-800">自进化中心</h1>
+        <h2 class="text-lg font-semibold text-slate-800">治理概览</h2>
         <p class="mt-1 text-sm text-slate-500">评审对话质量，审批经验并持续优化策略。</p>
       </div>
 
@@ -392,6 +401,32 @@ onMounted(load)
       </section>
 
       <div class="grid gap-6 lg:grid-cols-2">
+        <section class="rounded-xl bg-white p-5 shadow-sm">
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="font-medium text-slate-800">分诊安全复核</h2>
+            <span class="text-xs text-slate-400">仅含脱敏质量信号</span>
+          </div>
+          <div v-if="!healthSafetyReviews.length" class="mt-3 text-sm text-slate-400">
+            暂无待复核的高危分诊反馈
+          </div>
+          <div
+            v-for="item in healthSafetyReviews.slice(0, 20)"
+            :key="String(item.review_id)"
+            class="border-t py-3 text-sm first:border-0"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="font-medium text-red-700">高危结果需人工复核</span>
+              <span class="text-xs text-slate-400">{{ formatDate(item.created_at) }}</span>
+            </div>
+            <div class="mt-1 text-xs text-slate-500">
+              {{ item.task_type }} · {{ item.task_status }} · 安全决策 {{ item.safety_decision }} ·
+              状态 {{ item.review_status }}
+            </div>
+            <div class="mt-1 text-xs text-slate-400">
+              不含任务编号、用户身份、症状原文或报告数据
+            </div>
+          </div>
+        </section>
         <section class="rounded-xl bg-white p-5 shadow-sm">
           <h2 class="mb-3 font-medium text-slate-800">失败任务</h2>
           <div v-if="!jobs.some((job) => job.status === 'failed')" class="text-sm text-slate-400">
@@ -612,5 +647,5 @@ onMounted(load)
         </div>
       </div>
     </div>
-  </main>
+  </div>
 </template>

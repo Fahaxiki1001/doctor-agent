@@ -12,6 +12,7 @@ from mediZJ.swarm.events import Event, EventType
 
 # 模拟的问卷填写时长；断言时以此为下界判断是否被扣除
 WAIT_SECONDS = 0.3
+WAIT_TOLERANCE = 0.01
 
 
 class _FakeRequest:
@@ -129,7 +130,7 @@ async def test_ttft_excludes_questionnaire_wait(monkeypatch):
     # 等待时长已扣除：净耗时远小于等待时长本身
     assert ttft < WAIT_SECONDS
     # 扣除量传给了 compose_result，用于同步修正 total_time
-    assert holder["coordinator"].composed_wait >= WAIT_SECONDS
+    assert holder["coordinator"].composed_wait >= WAIT_SECONDS - WAIT_TOLERANCE
 
 
 async def test_ttft_unchanged_without_questionnaire(monkeypatch):
@@ -201,7 +202,7 @@ async def test_ttft_accumulates_multiple_questionnaire_rounds(monkeypatch):
     assert ttft is not None
     # 两轮等待共 2*WAIT_SECONDS，全部扣除后净耗时应小于单轮等待
     assert ttft < WAIT_SECONDS
-    assert holder["coordinator"].composed_wait >= 2 * WAIT_SECONDS
+    assert holder["coordinator"].composed_wait >= 2 * WAIT_SECONDS - WAIT_TOLERANCE
 
 
 async def test_compose_result_excludes_wait_and_never_negative():

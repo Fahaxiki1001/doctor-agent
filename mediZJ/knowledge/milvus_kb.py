@@ -258,6 +258,10 @@ class MedicalKnowledgeBase:
                     "source": meta.get("source", ""),
                     "filename": meta.get("filename", ""),
                     "content_hash": meta.get("content_hash", ""),
+                    "version": meta.get("version", ""),
+                    "published_at": meta.get("published_at", ""),
+                    "reviewed_at": meta.get("reviewed_at", ""),
+                    "applicable_population": meta.get("applicable_population", ""),
                 })
 
         logger.info(f"Split into {len(all_chunks)} chunks")
@@ -281,6 +285,10 @@ class MedicalKnowledgeBase:
                 "source": chunk["source"],
                 "filename": chunk["filename"],
                 "content_hash": chunk["content_hash"],
+                "version": chunk["version"],
+                "published_at": chunk["published_at"],
+                "reviewed_at": chunk["reviewed_at"],
+                "applicable_population": chunk["applicable_population"],
             }
             data.append(entry)
 
@@ -561,7 +569,8 @@ class MedicalKnowledgeBase:
                 collection_name=self.collection_name,
                 filter="id >= 0",
                 output_fields=["doc_id", "doc_type", "disease", "source",
-                               "filename", "chunk_id"],
+                               "filename", "chunk_id", "version", "published_at",
+                               "reviewed_at", "applicable_population"],
                 limit=16384,
             )
         except Exception as e:
@@ -578,6 +587,10 @@ class MedicalKnowledgeBase:
                     "type": row.get("doc_type", ""),
                     "disease": row.get("disease", ""),
                     "source": row.get("source", ""),
+                    "version": row.get("version") or None,
+                    "published_at": row.get("published_at") or None,
+                    "reviewed_at": row.get("reviewed_at") or None,
+                    "applicable_population": row.get("applicable_population") or None,
                     "chunk_ids": set(),
                 }
             chunk_id = row.get("chunk_id")
@@ -618,7 +631,8 @@ class MedicalKnowledgeBase:
                 output_fields=[
                     "id", "chunk_id", "total_chunks", "text",
                     "doc_type", "disease", "source", "filename",
-                    "content_hash",
+                    "content_hash", "version", "published_at", "reviewed_at",
+                    "applicable_population",
                 ],
                 limit=16384,
             )
@@ -645,6 +659,10 @@ class MedicalKnowledgeBase:
                     "source": row.get("source", ""),
                     "filename": row.get("filename", ""),
                     "content_hash": row.get("content_hash", ""),
+                    "version": row.get("version") or None,
+                    "published_at": row.get("published_at") or None,
+                    "reviewed_at": row.get("reviewed_at") or None,
+                    "applicable_population": row.get("applicable_population") or None,
                     "chunk_id": chunk_id,
                     "total_chunks": row.get("total_chunks", 0),
                 },

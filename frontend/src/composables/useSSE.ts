@@ -14,6 +14,7 @@ import type {
   IntentClassifiedData,
   DoneData,
   ErrorData,
+  HealthTaskEventData,
 } from '../types'
 
 export interface StreamCallbacks {
@@ -31,6 +32,11 @@ export interface StreamCallbacks {
   onAgentQuestionnaireCancelled?: (data: Record<string, unknown>) => void
   onIntentClassified?: (data: IntentClassifiedData) => void
   onTraceSpan?: (data: Record<string, unknown>) => void
+  onTaskStarted?: (data: HealthTaskEventData) => void
+  onRiskUpdate?: (data: HealthTaskEventData) => void
+  onSafetyWarning?: (data: HealthTaskEventData) => void
+  onWaitingConfirmation?: (data: HealthTaskEventData) => void
+  onTaskCompleted?: (data: HealthTaskEventData) => void
   onSuggestions?: (data: { suggestions: string[] }) => void
   onDone?: (data: DoneData) => void
   onError?: (data: ErrorData) => void
@@ -118,6 +124,21 @@ export function useSSE() {
                 break
               case 'trace_span':
                 callbacks.onTraceSpan?.(data)
+                break
+              case 'task_started':
+                callbacks.onTaskStarted?.(data)
+                break
+              case 'risk_update':
+                callbacks.onRiskUpdate?.(data)
+                break
+              case 'safety_warning':
+                callbacks.onSafetyWarning?.(data)
+                break
+              case 'waiting_confirmation':
+                callbacks.onWaitingConfirmation?.(data)
+                break
+              case 'task_completed':
+                callbacks.onTaskCompleted?.(data)
                 break
               case 'suggestions':
                 callbacks.onSuggestions?.(data)

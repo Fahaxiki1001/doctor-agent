@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { uploadImage, validateImage } from '../../api/image'
 
 const emit = defineEmits<{
   send: [question: string, images?: string[]]
 }>()
 
-defineProps<{
+const props = defineProps<{
   disabled?: boolean
+  initialValue?: string
 }>()
 
 interface ImageItem {
@@ -18,7 +19,13 @@ interface ImageItem {
   error?: string
 }
 
-const input = ref('')
+const input = ref(props.initialValue || '')
+watch(
+  () => props.initialValue,
+  (value) => {
+    if (value && !input.value) input.value = value
+  },
+)
 const selectedImages = ref<ImageItem[]>([])
 const imageInputRef = ref<HTMLInputElement | null>(null)
 const dragOver = ref(false)

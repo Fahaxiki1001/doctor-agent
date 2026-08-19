@@ -24,10 +24,8 @@ export async function uploadImage(file: File): Promise<ImageUploadResponse> {
   const formData = new FormData()
   formData.append('file', file)
 
-  const { data } = await api.post<ImageUploadResponse>(
-    '/chat/upload-image',
-    formData,
-    { headers: { 'Content-Type': 'multipart/form-data' } },
-  )
+  const { data } = await api.post<ImageUploadResponse>('/chat/upload-image', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
   return data
 }

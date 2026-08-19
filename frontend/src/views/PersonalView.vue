@@ -11,6 +11,7 @@ import {
   updateMedicalRecords,
 } from '../api/personal'
 import type { PersonalInfoItem, PendingItem, MedicalRecord } from '../api/personal'
+import TaskHistory from '../components/tasks/TaskHistory.vue'
 
 const auth = useAuthStore()
 const chatStore = useChatStore()
@@ -193,7 +194,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto p-6">
+  <div class="h-full overflow-y-auto p-4 sm:p-6">
     <div class="max-w-2xl mx-auto space-y-8">
       <template v-if="auth.isAuthenticated">
         <section
@@ -212,6 +213,9 @@ onMounted(async () => {
             退出登录
           </button>
         </section>
+        <!-- 错误提示 -->
+        <TaskHistory />
+
         <!-- 错误提示 -->
         <div
           v-if="error"
@@ -233,8 +237,8 @@ onMounted(async () => {
         <template v-else>
           <!-- ========== 区域 1：个人信息 ========== -->
           <section>
-            <div class="flex items-center justify-between mb-4">
-              <div>
+            <div class="mb-4 flex items-start justify-between gap-3">
+              <div class="min-w-0">
                 <h2 class="text-lg font-semibold text-slate-800">个人信息</h2>
                 <p class="text-sm text-slate-500 mt-1">
                   已确认的健康档案（年龄、过敏史、慢性病等）
@@ -244,7 +248,7 @@ onMounted(async () => {
                 <button
                   v-if="!editing"
                   @click="startEdit"
-                  class="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+                  class="shrink-0 whitespace-nowrap px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
                 >
                   编辑
                 </button>
@@ -443,8 +447,8 @@ onMounted(async () => {
 
           <!-- ========== 区域 3：病史记录 ========== -->
           <section>
-            <div class="flex items-center justify-between mb-4">
-              <div>
+            <div class="mb-4 flex items-start justify-between gap-3">
+              <div class="min-w-0">
                 <h2 class="text-lg font-semibold text-slate-800">病史记录</h2>
                 <p class="text-sm text-slate-500 mt-1">患病经历时间线（对话中自动记录）</p>
               </div>
@@ -452,7 +456,7 @@ onMounted(async () => {
                 <button
                   v-if="!editingRecords"
                   @click="startEditRecords"
-                  class="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+                  class="shrink-0 whitespace-nowrap px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
                 >
                   编辑
                 </button>

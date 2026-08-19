@@ -1,5 +1,5 @@
 """仪表盘接口的响应模型"""
-from typing import Dict, Any, List
+from typing import Dict, List
 from pydantic import BaseModel
 from .session import SessionListItem
 
@@ -18,6 +18,7 @@ class DashboardStats(BaseModel):
     avg_parallel_efficiency: float = 0.0
     avg_information_coverage: float = 0.0
     avg_redundancy: float = 0.0
+    health_task_stats: Dict[str, object] = {}
 
 
 class HealthResponse(BaseModel):

@@ -2,13 +2,16 @@
 图片分析服务
 使用独立的多模态 Vision 模型将图片解析为文字描述
 """
+
 import base64
+import json
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 from loguru import logger
 
 from mediZJ.core.llm_client import LLMClient
+from mediZJ.api.models.report import ReportAnalysisDraft, ReportMeasurement
 
 _UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "uploads"
 
@@ -34,16 +37,40 @@ VISION_PROMPT = """
 
 请用客观、专业的语言描述，不要给出任何结论，只给出客观描述。"""
 
+REPORT_EXTRACTION_PROMPT = """
+你只负责从检验单或体检报告中提取结构化数据，不做诊断。返回严格 JSON：
+{
+  "document_type": "lab_report|physical_exam|other",
+  "confidence": 0.0,
+  "warnings": [],
+  "manual_review": false,
+  "measurements": [
+    {"name":"", "value":"", "unit":"", "reference_range":"",
+     "abnormal_flag":"low|high|normal|unknown", "confidence":0.0,
+     "raw_text":"对应的简短原文"}
+  ]
+}
+看不清或不能确定的字段使用 null，不得猜测数值、单位或参考范围。图片低清、
+没有可确认指标或整体置信度低于 0.6 时设置 manual_review=true。不要提取姓名、
+身份证号、电话、住址、完整报告正文或图片 Base64。"""
+
 
 class ImageAnalyzer:
     """图片分析器：用 Vision 模型将图片转为文字描述"""
 
     def __init__(self):
-        self.model_name = os.getenv("VISION_MODEL_NAME") or os.getenv("LLM_MODEL_NAME", "gpt-4o")
+        self.model_name = os.getenv("VISION_MODEL_NAME") or os.getenv(
+            "LLM_MODEL_NAME", "gpt-4o"
+        )
         self.api_key = os.getenv("VISION_API_KEY") or os.getenv("LLM_API_KEY")
         self.base_url = os.getenv("VISION_BASE_URL") or os.getenv("LLM_BASE_URL")
         self.temperature = float(os.getenv("VISION_TEMPERATURE", "0.3"))
         self.max_tokens = int(os.getenv("VISION_MAX_TOKENS", "2048"))
+        self.report_min_confidence = float(
+            os.getenv("REPORT_VISION_MIN_CONFIDENCE", "0.6")
+        )
+        if not 0 <= self.report_min_confidence <= 1:
+            raise ValueError("REPORT_VISION_MIN_CONFIDENCE 必须在 0 到 1 之间")
 
         if not self.api_key or not self.base_url:
             logger.warning(
@@ -54,8 +81,13 @@ class ImageAnalyzer:
     def _get_client(self) -> LLMClient:
         """创建临时 LLMClient 实例，使用 Vision 模型配置"""
         prev = {}
-        for key in ("LLM_MODEL_NAME", "LLM_API_KEY", "LLM_BASE_URL",
-                     "LLM_TEMPERATURE", "LLM_MAX_TOKENS"):
+        for key in (
+            "LLM_MODEL_NAME",
+            "LLM_API_KEY",
+            "LLM_BASE_URL",
+            "LLM_TEMPERATURE",
+            "LLM_MAX_TOKENS",
+        ):
             prev[key] = os.environ.get(key)
 
         try:
@@ -86,8 +118,11 @@ class ImageAnalyzer:
 
         ext = file_path.suffix.lower()
         mime_map = {
-            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-            ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
         }
         mime = mime_map.get(ext, "image/jpeg")
 
@@ -125,13 +160,15 @@ class ImageAnalyzer:
                 descriptions.append(f"图片{i}（{img_path}）：无法加载")
                 continue
 
-            messages = [{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": data_uri}},
-                    {"type": "text", "text": VISION_PROMPT},
-                ]
-            }]
+            messages: Any = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": data_uri}},
+                        {"type": "text", "text": VISION_PROMPT},
+                    ],
+                }
+            ]
 
             try:
                 response = await client.chat(messages)
@@ -153,3 +190,89 @@ class ImageAnalyzer:
             f"用户问题：{user_question}"
         )
         return enhanced
+
+    async def analyze_report(self, image_paths: List[str]) -> ReportAnalysisDraft:
+        """Extract a validated report draft without making medical claims."""
+
+        if not image_paths:
+            return ReportAnalysisDraft(
+                manual_review=True,
+                warnings=["未提供报告图片"],
+            )
+        if not self.api_key or not self.base_url:
+            return ReportAnalysisDraft(
+                manual_review=True,
+                warnings=["Vision 服务未配置，无法自动提取报告"],
+            )
+        try:
+            client = self._get_client()
+        except Exception:
+            return ReportAnalysisDraft(
+                manual_review=True,
+                warnings=["Vision 服务初始化失败"],
+            )
+
+        drafts: List[ReportAnalysisDraft] = []
+        for image_path in image_paths:
+            data_uri = self._image_to_base64(image_path)
+            if not data_uri:
+                drafts.append(
+                    ReportAnalysisDraft(
+                        manual_review=True,
+                        warnings=["报告图片无法读取"],
+                    )
+                )
+                continue
+            messages: Any = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": data_uri}},
+                        {"type": "text", "text": REPORT_EXTRACTION_PROMPT},
+                    ],
+                }
+            ]
+            try:
+                response = await client.chat(messages)
+                raw = (
+                    response
+                    if isinstance(response, str)
+                    else getattr(response, "content", "")
+                )
+                raw = (raw or "").strip()
+                if raw.startswith("```"):
+                    raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
+                drafts.append(ReportAnalysisDraft.model_validate(json.loads(raw)))
+            except Exception:
+                drafts.append(
+                    ReportAnalysisDraft(
+                        manual_review=True,
+                        warnings=["报告结构化提取失败，请重试或人工录入"],
+                    )
+                )
+
+        measurements: List[ReportMeasurement] = []
+        warnings: List[str] = []
+        for draft in drafts:
+            measurements.extend(draft.measurements)
+            warnings.extend(draft.warnings)
+        confidence = min((draft.confidence for draft in drafts), default=0)
+        best_type = next(
+            (
+                draft.document_type
+                for draft in drafts
+                if draft.document_type.value != "other"
+            ),
+            drafts[0].document_type,
+        )
+        return ReportAnalysisDraft(
+            document_type=best_type,
+            measurements=measurements,
+            confidence=confidence,
+            warnings=warnings,
+            manual_review=(
+                any(draft.manual_review for draft in drafts)
+                or confidence < self.report_min_confidence
+                or not measurements
+            ),
+        )

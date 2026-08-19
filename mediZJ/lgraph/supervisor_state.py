@@ -20,6 +20,10 @@ class SupervisorState(TypedDict, total=False):
     session_id: str
     context: Dict[str, Any]
     start_time: str                 # ISO timestamp
+    task_id: str
+    task_type: str
+    output_schema: Dict[str, Any]
+    safety_flags: List[Dict[str, Any]]
 
     # === 消息（用于 Human-in-the-Loop clarify 阶段） ===
     messages: Annotated[List[Dict[str, Any]], add_messages]

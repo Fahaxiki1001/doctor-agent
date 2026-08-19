@@ -259,6 +259,32 @@ class EvolutionStorage:
                 cleanup_completed_at  TEXT
             );
 
+            -- Consumer health feedback is an aggregate quality signal only.
+            -- It deliberately has no task/user ids, comments, report values or
+            -- free-form health content and is never converted into an
+            -- experience automatically.
+            CREATE TABLE IF NOT EXISTS health_quality_signals (
+                signal_id       TEXT PRIMARY KEY,
+                task_type       TEXT NOT NULL,
+                task_status     TEXT NOT NULL,
+                rating          TEXT NOT NULL,
+                reason_codes    TEXT NOT NULL DEFAULT '[]',
+                safety_decision TEXT NOT NULL DEFAULT '',
+                created_at      TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS health_safety_reviews (
+                review_id       TEXT PRIMARY KEY,
+                signal_id       TEXT NOT NULL UNIQUE,
+                task_type       TEXT NOT NULL,
+                task_status     TEXT NOT NULL,
+                rating          TEXT NOT NULL,
+                safety_decision TEXT NOT NULL,
+                review_status   TEXT NOT NULL DEFAULT 'open',
+                created_at      TEXT NOT NULL,
+                FOREIGN KEY (signal_id) REFERENCES health_quality_signals(signal_id)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_feedback_message
                 ON conversation_feedback(assistant_message_id);
             CREATE INDEX IF NOT EXISTS idx_eval_jobs_status
@@ -271,6 +297,8 @@ class EvolutionStorage:
                 ON session_deletion_audits(created_at);
             CREATE INDEX IF NOT EXISTS idx_exposure_bucket
                 ON experience_exposures(experience_id, bucket, user_id);
+            CREATE INDEX IF NOT EXISTS idx_health_safety_reviews_status
+                ON health_safety_reviews(review_status, created_at);
             CREATE INDEX IF NOT EXISTS idx_jobs_state
                 ON evaluation_jobs(status, updated_at);
             """
@@ -1483,6 +1511,109 @@ class EvolutionStorage:
             return items
 
         return self._execute(_do_list)
+
+    def record_health_quality_signal(
+        self,
+        task_type: str,
+        task_status: str,
+        rating: str,
+        reason_codes: List[str],
+        safety_decision: str = "",
+    ) -> Dict[str, Any]:
+        """Persist a de-identified health-task quality signal.
+
+        This table is intentionally outside the conversation evaluation graph:
+        there is no assistant message, user id, task id, comment, symptom,
+        report value or image reference, and the signal cannot create or
+        publish an Evolution experience by itself.
+        """
+
+        allowed_reasons = {
+            "unclear",
+            "incomplete",
+            "unsafe",
+            "irrelevant",
+            "too_slow",
+            "wrong_source",
+            "other",
+        }
+        normalized_reasons = sorted(
+            {str(code) for code in reason_codes if str(code) in allowed_reasons}
+        )[:10]
+
+        def _record(conn: sqlite3.Connection) -> Dict[str, Any]:
+            signal_id = str(uuid.uuid4())
+            now = datetime.now().isoformat()
+            conn.execute(
+                """
+                INSERT INTO health_quality_signals
+                    (signal_id, task_type, task_status, rating, reason_codes,
+                     safety_decision, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    signal_id,
+                    task_type,
+                    task_status,
+                    rating,
+                    json.dumps(normalized_reasons, ensure_ascii=False),
+                    safety_decision,
+                    now,
+                ),
+            )
+            result = {
+                "signal_id": signal_id,
+                "task_type": task_type,
+                "task_status": task_status,
+                "rating": rating,
+                "reason_codes": normalized_reasons,
+                "safety_decision": safety_decision,
+                "created_at": now,
+            }
+            if (
+                task_type == "triage"
+                and rating == "dislike"
+                and safety_decision in {"medical_attention", "emergency_stop"}
+            ):
+                conn.execute(
+                    """
+                    INSERT INTO health_safety_reviews
+                        (review_id, signal_id, task_type, task_status, rating,
+                         safety_decision, review_status, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, 'open', ?)
+                    """,
+                    (
+                        str(uuid.uuid4()),
+                        signal_id,
+                        task_type,
+                        task_status,
+                        rating,
+                        safety_decision,
+                        now,
+                    ),
+                )
+                result["review_required"] = True
+            return result
+
+        return self._execute(_record)
+
+    def list_health_safety_reviews(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """List de-identified triage safety reviews for operators."""
+
+        def _list(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+            rows = conn.execute(
+                """
+                SELECT review_id, signal_id, task_type, task_status, rating,
+                       safety_decision, review_status, created_at
+                FROM health_safety_reviews
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+        return self._execute(_list)
 
     def list_failures(self, limit: int = 100) -> List[Dict[str, Any]]:
         """返回关联对话、Trace 和源码位置的失败案例。"""

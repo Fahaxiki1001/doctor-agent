@@ -140,3 +140,44 @@ class TestListTracesFilter:
         assert storage.list_traces(user_id="bob") == []
         assert storage.get_trace("trace-user", user_id="alice") is not None
         assert storage.get_trace("trace-user", user_id="bob") is None
+
+    def test_filter_by_health_task_attributes(self, storage):
+        matching = Span(
+            id="task-match",
+            trace_id="trace-match",
+            span_type=SpanType.TRACE,
+            name="request",
+            trace_attrs=TraceAttributes(
+                session_id="session-match",
+                task_id="health-task-1",
+                task_type="triage",
+                task_status="completed",
+                risk_level="medium",
+                safety_decision="allow_with_notice",
+            ),
+        )
+        matching.timing.finish()
+        other = Span(
+            id="task-other",
+            trace_id="trace-other",
+            span_type=SpanType.TRACE,
+            name="request",
+            trace_attrs=TraceAttributes(
+                session_id="session-other",
+                task_type="knowledge_search",
+                task_status="failed",
+                error_code="KB_UNAVAILABLE",
+            ),
+        )
+        other.timing.finish()
+        storage.save(matching, [matching])
+        storage.save(other, [other])
+
+        traces = storage.list_traces(
+            task_type="triage",
+            task_status="completed",
+            safety_decision="allow_with_notice",
+        )
+        assert [item["trace_id"] for item in traces] == ["trace-match"]
+        assert traces[0]["task_id"] == "health-task-1"
+        assert storage.count_traces(error_code="KB_UNAVAILABLE") == 1

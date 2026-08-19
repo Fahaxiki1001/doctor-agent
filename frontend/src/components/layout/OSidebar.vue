@@ -21,7 +21,7 @@ const navItems = [
   },
   {
     path: '/o/traces',
-    label: '轨迹',
+    label: 'Trace 追踪',
     icon: 'M13 10V3L4 14h7v7l9-11h-7z',
   },
   {

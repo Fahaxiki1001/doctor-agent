@@ -168,9 +168,83 @@ class SessionDB:
                 original_name TEXT NOT NULL,
                 content_type  TEXT NOT NULL,
                 size          INTEGER NOT NULL,
+                purpose       TEXT NOT NULL DEFAULT 'chat',
+                expires_at    TEXT,
                 created_at    TEXT NOT NULL,
                 FOREIGN KEY (user_id)
                     REFERENCES users(user_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS health_tasks (
+                task_id        TEXT PRIMARY KEY,
+                user_id        TEXT NOT NULL,
+                task_type      TEXT NOT NULL,
+                session_id     TEXT,
+                status         TEXT NOT NULL,
+                input_snapshot TEXT NOT NULL DEFAULT '{}',
+                result         TEXT NOT NULL DEFAULT '{}',
+                safety_flags   TEXT NOT NULL DEFAULT '[]',
+                trace_id       TEXT,
+                expires_at     TEXT,
+                created_at     TEXT NOT NULL,
+                updated_at     TEXT NOT NULL,
+                FOREIGN KEY (user_id)
+                    REFERENCES users(user_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS health_task_audit (
+                audit_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_hash      TEXT NOT NULL,
+                user_hash      TEXT NOT NULL,
+                task_type      TEXT NOT NULL,
+                action         TEXT NOT NULL,
+                created_at     TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS health_task_feedback (
+                task_id      TEXT PRIMARY KEY,
+                user_id      TEXT NOT NULL,
+                rating       TEXT NOT NULL,
+                reason_codes TEXT NOT NULL DEFAULT '[]',
+                comment      TEXT NOT NULL DEFAULT '',
+                created_at   TEXT NOT NULL,
+                updated_at   TEXT NOT NULL,
+                FOREIGN KEY (task_id)
+                    REFERENCES health_tasks(task_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS report_documents (
+                report_id       TEXT PRIMARY KEY,
+                task_id         TEXT NOT NULL UNIQUE,
+                user_id         TEXT NOT NULL,
+                upload_filename TEXT NOT NULL,
+                document_type   TEXT NOT NULL DEFAULT 'other',
+                status          TEXT NOT NULL,
+                analysis_error  TEXT,
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL,
+                FOREIGN KEY (task_id)
+                    REFERENCES health_tasks(task_id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id)
+                    REFERENCES users(user_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS report_measurements (
+                measurement_id   TEXT PRIMARY KEY,
+                report_id        TEXT NOT NULL,
+                name             TEXT NOT NULL,
+                value            TEXT,
+                unit             TEXT,
+                reference_range  TEXT,
+                abnormal_flag    TEXT NOT NULL DEFAULT 'unknown',
+                confidence       REAL NOT NULL DEFAULT 0,
+                raw_text         TEXT,
+                user_confirmed   INTEGER NOT NULL DEFAULT 0,
+                unable_to_confirm INTEGER NOT NULL DEFAULT 0,
+                created_at       TEXT NOT NULL,
+                updated_at       TEXT NOT NULL,
+                FOREIGN KEY (report_id)
+                    REFERENCES report_documents(report_id) ON DELETE CASCADE
             );
 
             CREATE INDEX IF NOT EXISTS idx_msg_session
@@ -179,6 +253,18 @@ class SessionDB:
                 ON auth_sessions(user_id);
             CREATE INDEX IF NOT EXISTS idx_uploads_user
                 ON uploads(user_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_health_tasks_user_type_created
+                ON health_tasks(user_id, task_type, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_health_tasks_status
+                ON health_tasks(status);
+            CREATE INDEX IF NOT EXISTS idx_health_tasks_session
+                ON health_tasks(user_id, session_id);
+            CREATE INDEX IF NOT EXISTS idx_reports_user_created
+                ON report_documents(user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_reports_status
+                ON report_documents(status);
+            CREATE INDEX IF NOT EXISTS idx_report_measurements_report
+                ON report_measurements(report_id);
         """)
 
         now = datetime.now().isoformat()
@@ -205,6 +291,8 @@ class SessionDB:
             ("messages", "images", "TEXT"),
             ("messages", "trace_id", "TEXT"),
             ("messages", "time_to_first_token", "REAL"),
+            ("uploads", "purpose", "TEXT NOT NULL DEFAULT 'chat'"),
+            ("uploads", "expires_at", "TEXT"),
         ]
         for table, col, col_type in migrations:
             try:
@@ -219,6 +307,10 @@ class SessionDB:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_sessions_user "
             "ON sessions(user_id, updated_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_uploads_expiry "
+            "ON uploads(expires_at)"
         )
 
     # ========== 用户与登录会话 ==========
@@ -355,6 +447,8 @@ class SessionDB:
         original_name: str,
         content_type: str,
         size: int,
+        purpose: str = "chat",
+        expires_at: Optional[str] = None,
     ) -> None:
         """记录上传文件归属。"""
 
@@ -363,8 +457,8 @@ class SessionDB:
                 """
                 INSERT INTO uploads
                     (filename, user_id, original_name, content_type,
-                     size, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                     size, purpose, expires_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     filename,
@@ -372,6 +466,8 @@ class SessionDB:
                     original_name,
                     content_type,
                     size,
+                    purpose,
+                    expires_at,
                     datetime.now().isoformat(),
                 ),
             )
@@ -389,6 +485,583 @@ class SessionDB:
             return dict(row) if row else None
 
         return self._execute(_do_get)
+
+    def delete_upload(self, filename: str, user_id: Optional[str] = None) -> bool:
+        """Delete upload metadata, optionally enforcing ownership."""
+
+        def _do_delete(conn: sqlite3.Connection) -> bool:
+            if user_id is None:
+                cursor = conn.execute(
+                    "DELETE FROM uploads WHERE filename = ?", (filename,)
+                )
+            else:
+                cursor = conn.execute(
+                    "DELETE FROM uploads WHERE filename = ? AND user_id = ?",
+                    (filename, user_id),
+                )
+            return cursor.rowcount > 0
+
+        return self._execute(_do_delete)
+
+    def list_expired_uploads(self, now: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List uploads whose explicit retention deadline has passed."""
+
+        def _do_list(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+            rows = conn.execute(
+                """
+                SELECT * FROM uploads
+                WHERE expires_at IS NOT NULL AND expires_at <= ?
+                ORDER BY expires_at
+                """,
+                (now or datetime.now().isoformat(),),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+        return self._execute(_do_list)
+
+    # ========== Unified health tasks ==========
+
+    def create_health_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a health task and return the stored row."""
+
+        def _do_create(conn: sqlite3.Connection) -> Dict[str, Any]:
+            now = task.get("created_at") or datetime.now().isoformat()
+            conn.execute(
+                """
+                INSERT INTO health_tasks (
+                    task_id, user_id, task_type, session_id, status,
+                    input_snapshot, result, safety_flags, trace_id,
+                    expires_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    task["task_id"],
+                    task["user_id"],
+                    task["task_type"],
+                    task.get("session_id"),
+                    task["status"],
+                    json.dumps(task.get("input_snapshot") or {}, ensure_ascii=False),
+                    json.dumps(task.get("result") or {}, ensure_ascii=False),
+                    json.dumps(task.get("safety_flags") or [], ensure_ascii=False),
+                    task.get("trace_id"),
+                    task.get("expires_at"),
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM health_tasks WHERE task_id = ?",
+                (task["task_id"],),
+            ).fetchone()
+            return dict(row)
+
+        return self._execute(_do_create)
+
+    def get_health_task(
+        self, task_id: str, user_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Get a task, applying user ownership when supplied."""
+
+        def _do_get(conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
+            if user_id is None:
+                row = conn.execute(
+                    "SELECT * FROM health_tasks WHERE task_id = ?", (task_id,)
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM health_tasks WHERE task_id = ? AND user_id = ?",
+                    (task_id, user_id),
+                ).fetchone()
+            return dict(row) if row else None
+
+        return self._execute(_do_get)
+
+    def list_health_tasks(
+        self,
+        user_id: str,
+        limit: int = 50,
+        offset: int = 0,
+        task_type: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """List a user's tasks with optional type and status filters."""
+
+        def _do_list(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+            clauses = ["user_id = ?"]
+            params: List[Any] = [user_id]
+            if task_type:
+                clauses.append("task_type = ?")
+                params.append(task_type)
+            if status:
+                clauses.append("status = ?")
+                params.append(status)
+            params.extend([limit, offset])
+            rows = conn.execute(
+                f"SELECT * FROM health_tasks WHERE {' AND '.join(clauses)} "
+                "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                params,
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+        return self._execute(_do_list)
+
+    def count_health_tasks(
+        self,
+        user_id: str,
+        task_type: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> int:
+        """Count a user's tasks using the same filters as list."""
+
+        def _do_count(conn: sqlite3.Connection) -> int:
+            clauses = ["user_id = ?"]
+            params: List[Any] = [user_id]
+            if task_type:
+                clauses.append("task_type = ?")
+                params.append(task_type)
+            if status:
+                clauses.append("status = ?")
+                params.append(status)
+            row = conn.execute(
+                f"SELECT COUNT(*) AS count FROM health_tasks "
+                f"WHERE {' AND '.join(clauses)}",
+                params,
+            ).fetchone()
+            return int(row["count"])
+
+        return self._execute(_do_count)
+
+    def list_expired_health_tasks(
+        self, now: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Return unfinished tasks past their retention/interaction deadline."""
+
+        def _do_list(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+            rows = conn.execute(
+                """
+                SELECT * FROM health_tasks
+                WHERE expires_at IS NOT NULL
+                  AND expires_at <= ?
+                  AND status IN ('created', 'collecting', 'processing',
+                                 'waiting_confirmation')
+                ORDER BY expires_at
+                """,
+                (now or datetime.now().isoformat(),),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+        return self._execute(_do_list)
+
+    def update_health_task(
+        self,
+        task_id: str,
+        user_id: str,
+        updates: Dict[str, Any],
+        expected_status: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Atomically update an owned task, optionally comparing its status."""
+
+        allowed = {
+            "status", "session_id", "input_snapshot", "result", "safety_flags",
+            "trace_id", "expires_at",
+        }
+        unknown = set(updates) - allowed
+        if unknown:
+            raise ValueError(f"Unsupported task fields: {sorted(unknown)}")
+
+        def _do_update(conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
+            assignments: List[str] = []
+            params: List[Any] = []
+            for key, value in updates.items():
+                assignments.append(f"{key} = ?")
+                if key in {"input_snapshot", "result", "safety_flags"}:
+                    value = json.dumps(value, ensure_ascii=False)
+                params.append(value)
+            assignments.append("updated_at = ?")
+            params.append(datetime.now().isoformat())
+            where = "task_id = ? AND user_id = ?"
+            params.extend([task_id, user_id])
+            if expected_status is not None:
+                where += " AND status = ?"
+                params.append(expected_status)
+            cursor = conn.execute(
+                f"UPDATE health_tasks SET {', '.join(assignments)} WHERE {where}",
+                params,
+            )
+            if cursor.rowcount == 0:
+                return None
+            row = conn.execute(
+                "SELECT * FROM health_tasks WHERE task_id = ? AND user_id = ?",
+                (task_id, user_id),
+            ).fetchone()
+            return dict(row) if row else None
+
+        return self._execute(_do_update)
+
+    def delete_health_task(self, task_id: str, user_id: str) -> bool:
+        """Delete an owned task. Related feature tables cascade from this row."""
+
+        def _do_delete(conn: sqlite3.Connection) -> bool:
+            cursor = conn.execute(
+                "DELETE FROM health_tasks WHERE task_id = ? AND user_id = ?",
+                (task_id, user_id),
+            )
+            return cursor.rowcount > 0
+
+        return self._execute(_do_delete)
+
+    def add_health_task_audit(
+        self, task_hash: str, user_hash: str, task_type: str, action: str
+    ) -> None:
+        """Store a content-free audit entry."""
+
+        def _do_add(conn: sqlite3.Connection) -> None:
+            conn.execute(
+                """
+                INSERT INTO health_task_audit
+                    (task_hash, user_hash, task_type, action, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    task_hash,
+                    user_hash,
+                    task_type,
+                    action,
+                    datetime.now().isoformat(),
+                ),
+            )
+
+        self._execute(_do_add)
+
+    def get_health_task_metrics(
+        self, user_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Return aggregate task quality metrics without user content or IDs."""
+
+        def _do_metrics(conn: sqlite3.Connection) -> Dict[str, Any]:
+            if user_id is None:
+                task_rows = conn.execute(
+                    "SELECT task_type, status, result FROM health_tasks"
+                ).fetchall()
+                report_rows = conn.execute(
+                    "SELECT status FROM report_documents"
+                ).fetchall()
+            else:
+                task_rows = conn.execute(
+                    "SELECT task_type, status, result FROM health_tasks WHERE user_id = ?",
+                    (user_id,),
+                ).fetchall()
+                report_rows = conn.execute(
+                    "SELECT status FROM report_documents WHERE user_id = ?",
+                    (user_id,),
+                ).fetchall()
+            by_type: Dict[str, int] = {}
+            by_status: Dict[str, int] = {}
+            triage_total = 0
+            triage_abandoned = 0
+            knowledge_total = 0
+            knowledge_empty = 0
+            for row in task_rows:
+                by_type[row["task_type"]] = by_type.get(row["task_type"], 0) + 1
+                by_status[row["status"]] = by_status.get(row["status"], 0) + 1
+                if row["task_type"] == "triage":
+                    triage_total += 1
+                    if row["status"] in {"cancelled", "failed"}:
+                        triage_abandoned += 1
+                if row["task_type"] == "knowledge_search":
+                    knowledge_total += 1
+                    try:
+                        result = json.loads(row["result"] or "{}")
+                    except json.JSONDecodeError:
+                        result = {}
+                    if result.get("total", 0) == 0:
+                        knowledge_empty += 1
+            report_total = len(report_rows)
+            report_completed = sum(
+                1 for row in report_rows if row["status"] == "completed"
+            )
+            report_failed = sum(
+                1 for row in report_rows
+                if row["status"] in {"failed", "manual_review"}
+            )
+            total = len(task_rows)
+            completed = by_status.get("completed", 0) + by_status.get(
+                "needs_medical_attention", 0
+            )
+            return {
+                "total": total,
+                "completion_rate": completed / total if total else 0,
+                "by_type": by_type,
+                "by_status": by_status,
+                "questionnaire_abandonment_rate": (
+                    triage_abandoned / triage_total if triage_total else 0
+                ),
+                "knowledge_empty_rate": (
+                    knowledge_empty / knowledge_total if knowledge_total else 0
+                ),
+                "report_confirmation_rate": (
+                    report_completed / report_total if report_total else 0
+                ),
+                "report_failure_rate": (
+                    report_failed / report_total if report_total else 0
+                ),
+            }
+
+        return self._execute(_do_metrics)
+
+    def upsert_health_task_feedback(
+        self,
+        task_id: str,
+        user_id: str,
+        rating: str,
+        reason_codes: List[str],
+        comment: str,
+    ) -> Dict[str, Any]:
+        """Store task quality feedback without copying task health content."""
+
+        def _do_upsert(conn: sqlite3.Connection) -> Dict[str, Any]:
+            owned = conn.execute(
+                "SELECT 1 FROM health_tasks WHERE task_id = ? AND user_id = ?",
+                (task_id, user_id),
+            ).fetchone()
+            if owned is None:
+                raise LookupError(task_id)
+            now = datetime.now().isoformat()
+            conn.execute(
+                """
+                INSERT INTO health_task_feedback
+                    (task_id, user_id, rating, reason_codes, comment,
+                     created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(task_id) DO UPDATE SET
+                    rating = excluded.rating,
+                    reason_codes = excluded.reason_codes,
+                    comment = excluded.comment,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    task_id,
+                    user_id,
+                    rating,
+                    json.dumps(reason_codes, ensure_ascii=False),
+                    comment,
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM health_task_feedback WHERE task_id = ? AND user_id = ?",
+                (task_id, user_id),
+            ).fetchone()
+            result = dict(row)
+            result["reason_codes"] = json.loads(result["reason_codes"])
+            return result
+
+        return self._execute(_do_upsert)
+
+    # ========== Report interpretation ==========
+
+    def create_report(self, report: Dict[str, Any]) -> Dict[str, Any]:
+        def _do_create(conn: sqlite3.Connection) -> Dict[str, Any]:
+            now = datetime.now().isoformat()
+            conn.execute(
+                """
+                INSERT INTO report_documents (
+                    report_id, task_id, user_id, upload_filename,
+                    document_type, status, analysis_error, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
+                """,
+                (
+                    report["report_id"], report["task_id"], report["user_id"],
+                    report["upload_filename"], report.get("document_type", "other"),
+                    report["status"], now, now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM report_documents WHERE report_id = ?",
+                (report["report_id"],),
+            ).fetchone()
+            return dict(row)
+
+        return self._execute(_do_create)
+
+    def get_report(
+        self, report_id: str, user_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        def _do_get(conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
+            if user_id is None:
+                row = conn.execute(
+                    "SELECT * FROM report_documents WHERE report_id = ?",
+                    (report_id,),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM report_documents WHERE report_id = ? AND user_id = ?",
+                    (report_id, user_id),
+                ).fetchone()
+            return dict(row) if row else None
+
+        return self._execute(_do_get)
+
+    def get_report_by_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+        def _do_get(conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
+            row = conn.execute(
+                "SELECT * FROM report_documents WHERE task_id = ?", (task_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+        return self._execute(_do_get)
+
+    def list_reports(
+        self, user_id: str, limit: int = 50, offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        def _do_list(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+            rows = conn.execute(
+                """
+                SELECT * FROM report_documents WHERE user_id = ?
+                ORDER BY created_at DESC LIMIT ? OFFSET ?
+                """,
+                (user_id, limit, offset),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+        return self._execute(_do_list)
+
+    def update_report(
+        self, report_id: str, user_id: str, updates: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        allowed = {"status", "document_type", "analysis_error"}
+        unknown = set(updates) - allowed
+        if unknown:
+            raise ValueError(f"Unsupported report fields: {sorted(unknown)}")
+
+        def _do_update(conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
+            assignments = [f"{key} = ?" for key in updates]
+            params = list(updates.values())
+            assignments.append("updated_at = ?")
+            params.extend([datetime.now().isoformat(), report_id, user_id])
+            cursor = conn.execute(
+                f"UPDATE report_documents SET {', '.join(assignments)} "
+                "WHERE report_id = ? AND user_id = ?",
+                params,
+            )
+            if cursor.rowcount == 0:
+                return None
+            row = conn.execute(
+                "SELECT * FROM report_documents WHERE report_id = ? AND user_id = ?",
+                (report_id, user_id),
+            ).fetchone()
+            return dict(row) if row else None
+
+        return self._execute(_do_update)
+
+    def replace_report_measurements(
+        self, report_id: str, measurements: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        def _do_replace(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+            conn.execute(
+                "DELETE FROM report_measurements WHERE report_id = ?", (report_id,)
+            )
+            now = datetime.now().isoformat()
+            for item in measurements:
+                conn.execute(
+                    """
+                    INSERT INTO report_measurements (
+                        measurement_id, report_id, name, value, unit,
+                        reference_range, abnormal_flag, confidence, raw_text,
+                        user_confirmed, unable_to_confirm, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        item["measurement_id"], report_id, item["name"],
+                        item.get("value"), item.get("unit"),
+                        item.get("reference_range"),
+                        item.get("abnormal_flag", "unknown"),
+                        float(item.get("confidence", 0)), item.get("raw_text"),
+                        int(bool(item.get("user_confirmed", False))),
+                        int(bool(item.get("unable_to_confirm", False))), now, now,
+                    ),
+                )
+            rows = conn.execute(
+                "SELECT * FROM report_measurements WHERE report_id = ? ORDER BY rowid",
+                (report_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+        return self._execute(_do_replace)
+
+    def list_report_measurements(
+        self, report_id: str
+    ) -> List[Dict[str, Any]]:
+        def _do_list(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+            rows = conn.execute(
+                "SELECT * FROM report_measurements WHERE report_id = ? ORDER BY rowid",
+                (report_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+        return self._execute(_do_list)
+
+    def update_report_measurement(
+        self, measurement_id: str, report_id: str, updates: Dict[str, Any]
+    ) -> bool:
+        allowed = {
+            "name", "value", "unit", "reference_range", "abnormal_flag",
+            "user_confirmed", "unable_to_confirm",
+        }
+        unknown = set(updates) - allowed
+        if unknown:
+            raise ValueError(f"Unsupported measurement fields: {sorted(unknown)}")
+
+        def _do_update(conn: sqlite3.Connection) -> bool:
+            assignments = [f"{key} = ?" for key in updates]
+            values = [
+                int(bool(value)) if key in {"user_confirmed", "unable_to_confirm"}
+                else value
+                for key, value in updates.items()
+            ]
+            assignments.append("updated_at = ?")
+            values.extend([datetime.now().isoformat(), measurement_id, report_id])
+            cursor = conn.execute(
+                f"UPDATE report_measurements SET {', '.join(assignments)} "
+                "WHERE measurement_id = ? AND report_id = ?",
+                values,
+            )
+            return cursor.rowcount > 0
+
+        return self._execute(_do_update)
+
+    def delete_report_measurement(
+        self, measurement_id: str, report_id: str
+    ) -> bool:
+        def _do_delete(conn: sqlite3.Connection) -> bool:
+            cursor = conn.execute(
+                "DELETE FROM report_measurements "
+                "WHERE measurement_id = ? AND report_id = ?",
+                (measurement_id, report_id),
+            )
+            return cursor.rowcount > 0
+
+        return self._execute(_do_delete)
+
+    def delete_report(self, report_id: str, user_id: str) -> bool:
+        def _do_delete(conn: sqlite3.Connection) -> bool:
+            cursor = conn.execute(
+                "DELETE FROM report_documents WHERE report_id = ? AND user_id = ?",
+                (report_id, user_id),
+            )
+            return cursor.rowcount > 0
+
+        return self._execute(_do_delete)
+
+    def list_stale_reports(self) -> List[Dict[str, Any]]:
+        def _do_list(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+            rows = conn.execute(
+                "SELECT * FROM report_documents WHERE status IN ('analyzing', 'processing')"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+        return self._execute(_do_list)
 
     # ========== 个人健康档案（profiles 表） ==========
 

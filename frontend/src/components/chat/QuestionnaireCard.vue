@@ -26,18 +26,19 @@ watch(
 
 const total = computed(() => props.questionnaire.questions.length)
 const currentQ = computed(() => props.questionnaire.questions[activeTab.value])
-const currentKey = computed(() => `q${activeTab.value}`)
+const keyFor = (idx: number) => props.questionnaire.questions[idx]?.id || `q${idx}`
+const currentKey = computed(() => keyFor(activeTab.value))
 
 // 初始化答案
 for (let i = 0; i < total.value; i++) {
   const q = props.questionnaire.questions[i]
-  answers[`q${i}`] = q.type === 'multi' ? [] : ''
+  answers[keyFor(i)] = q.type === 'multi' ? [] : ''
 }
 
 // 当前问题是否已回答
 function isAnswered(idx: number): boolean {
   const q = props.questionnaire.questions[idx]
-  const key = `q${idx}`
+  const key = keyFor(idx)
   const val = answers[key]
   const other = otherTexts[key]?.trim()
   if (q.type === 'multi') return (Array.isArray(val) && val.length > 0) || !!other
@@ -80,7 +81,10 @@ function handleSubmit() {
   for (const key in otherTexts) {
     const other = otherTexts[key]?.trim()
     if (!other) continue
-    const q = props.questionnaire.questions[parseInt(key.slice(1))]
+    const questionIndex = props.questionnaire.questions.findIndex(
+      (question, index) => (question.id || `q${index}`) === key,
+    )
+    const q = props.questionnaire.questions[questionIndex]
     if (q?.type === 'multi' && Array.isArray(merged[key])) {
       merged[key] = [...merged[key], other]
     } else if (q?.type === 'enum') {
@@ -204,10 +208,14 @@ function handleSubmit() {
       </div>
 
       <!-- 文本输入 (input) -->
-      <div v-else-if="currentQ.type === 'input'" class="qc-input-wrap">
+      <div
+        v-else-if="currentQ.type === 'input' || currentQ.type === 'number'"
+        class="qc-input-wrap"
+      >
         <input
           v-model="answers[currentKey]"
-          type="text"
+          :type="currentQ.type === 'number' ? 'number' : 'text'"
+          :aria-label="currentQ.text"
           :placeholder="`请输入${currentQ.header}...`"
           class="qc-input"
         />

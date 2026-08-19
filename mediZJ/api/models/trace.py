@@ -33,6 +33,12 @@ class TraceSummary(BaseModel):
     agents_involved: List[str] = []
     span_count: int = 0
     question_summary: str = ""
+    task_id: str = ""
+    task_type: str = ""
+    task_status: str = ""
+    risk_level: str = ""
+    safety_decision: str = ""
+    error_code: str = ""
 
 
 class TraceListResponse(BaseModel):

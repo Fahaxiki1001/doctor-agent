@@ -2,7 +2,7 @@
 
 import pytest
 from datetime import datetime
-from mediZJ.swarm.events import Event, EventType
+from mediZJ.swarm.events import Event, EventType, health_task_event
 
 
 class TestEventType:
@@ -44,3 +44,15 @@ class TestEvent:
         assert d["data"] == {"ok": True}
         assert "id" in d
         assert "timestamp" in d
+
+    def test_health_task_event_has_context_and_filters_sensitive_data(self):
+        evt = health_task_event(
+            EventType.HEALTH_WAITING_CONFIRMATION,
+            "task-1",
+            "report_interpretation",
+            {"status": "waiting_confirmation", "image_base64": "secret"},
+        )
+        data = evt.to_dict()["data"]
+        assert data["task_id"] == "task-1"
+        assert data["task_type"] == "report_interpretation"
+        assert "image_base64" not in data
